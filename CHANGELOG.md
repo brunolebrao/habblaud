@@ -10,10 +10,9 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
-
 ### Adicionado
 
-- Pacote de arte "Forja" (opcional, `"art": "forja"` no brand.json): oficinas medievais com bancadas e impressoras 3D, cadeiras de madeira, prateleiras de filamento, tochas, barris, piso de tábuas e pedra, paredes de reboco e pedra e interface em madeira e cobre. Só local: a Visita e o Habblaud World continuam com a arte original.
+- **Pacote de arte "Forja" (`"art": "forja"` no brand.json).** Opcional: `"art": "forja"` no brand.json): oficinas medievais com bancadas e impressoras 3D, cadeiras de madeira, prateleiras de filamento, tochas, barris, piso de tábuas e pedra, paredes de reboco e pedra e interface em madeira e cobre. Só local: a Visita e o Habblaud World continuam com a arte original.
 - **Esconder pastas do escritório (`HABBLAUD_IGNORE_DIRS`).** Pastas separadas por vírgula, como `~/.claude-mem`
   (onde o claude-mem roda as próprias sessões do Claude Code): as sessões nelas ou nas subpastas não viram sala nem
   personagem e ficam fora do histórico de sessões, das Entregas e das pastas do Novo agente. No Docker, vale no `.env`.
