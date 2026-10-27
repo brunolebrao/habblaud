@@ -8,7 +8,7 @@
 // motivo. O Codex nunca pergunta pelo escritório (sem cartão de pergunta).
 import { access, isLoopbackHostname } from '../net/access';
 import { ANSWER_OTHER_MAX, ASK_TOOL, checkAnswers } from '../../../shared/answers';
-import type { AgentInfo, AskQuestion, PermissionAnswer, PermissionDecision, PermissionRequestInfo, PermissionSuggestionInfo } from '../../../shared/types';
+import type { AgentInfo, AskQuestion, PermissionAnswer, PermissionDecision, PermissionModeChoice, PermissionRequestInfo, PermissionSuggestionInfo } from '../../../shared/types';
 import type { UiContext } from './context';
 import { h, KeyedList, setAttr, setHidden, setText, setTitle } from './dom';
 import { formatClock, formatDuration } from './format';
@@ -17,6 +17,14 @@ import { diffLineKind, moreLabel, previewText, showToolInput, splitToolTitle } f
 import { tr } from '../../../shared/i18n';
 
 /** Evento (em ctx.root) que pede para o cartão de um agente aparecer: rolar até ele e receber o foco. */
+/** Modos oferecidos ao aprovar (server/permissions/registry.ts confere; bypassPermissions nunca). */
+const MODE_CHOICES: Array<[PermissionModeChoice, string]> = [
+  ['acceptEdits', tr('Aceitar edições')],
+  ['auto', tr('Auto')],
+  ['default', tr('Manual')],
+  ['plan', tr('Plano')],
+];
+
 export const PERMISSION_FOCUS_EVENT = 'habblaud:permission-focus';
 const PREVIEW_LINES = 12;
 const MESSAGE_MAX = 1_000;
@@ -222,6 +230,9 @@ export class PermissionCard {
   private askId = '';
   private askRefs: AskRefs[] = [];
   private answerBtn: HTMLButtonElement;
+  /** "Aprovar e mudar o modo": um botão por modo (só Claude Code). */
+  private modes: HTMLElement;
+  private modeBtns: Array<[PermissionModeChoice, HTMLButtonElement]>;
 
   constructor(private ctx: UiContext) {
     this.icon = h('span', { class: 'ui-perm__icon', attrs: { 'aria-hidden': 'true' } });
@@ -261,6 +272,16 @@ export class PermissionCard {
       },
     });
     this.always = h('div', { class: 'ui-perm__always', hidden: true }, h('span', { class: 'ui-perm__always-label', text: tr('Aprovar e não perguntar de novo:') }), list);
+    this.modeBtns = MODE_CHOICES.map(([mode, label]) => [
+      mode,
+      h('button', { class: 'ui-btn ui-perm__rule', type: 'button', title: tr('Aprovar e passar a sessão para o modo {0}', [label]), on: { click: () => this.send({ behavior: 'allow', mode }) } }, label),
+    ]);
+    this.modes = h(
+      'div',
+      { class: 'ui-perm__always', hidden: true },
+      h('span', { class: 'ui-perm__always-label', text: tr('Aprovar e mudar o modo da sessão:') }),
+      h('div', { class: 'ui-perm__rules' }, ...this.modeBtns.map(([, b]) => b)),
+    );
 
     this.reason = h('textarea', { class: 'ui-perm__reason', attrs: { rows: 2, maxlength: MESSAGE_MAX, placeholder: tr('Motivo (opcional, vai para o agente). Ex.: use pnpm em vez de npm'), 'aria-label': tr('Motivo da recusa (opcional)') } });
     this.interrupt = h('input', { type: 'checkbox', class: 'ui-perm__check' });
@@ -301,6 +322,7 @@ export class PermissionCard {
       this.remote,
       h('div', { class: 'ui-perm__actions' }, this.approveBtn, this.answerBtn, this.denyBtn, this.terminalBtn),
       this.always,
+      this.modes,
       this.denyForm,
       this.status,
     );
@@ -387,6 +409,12 @@ export class PermissionCard {
     this.suggestions.sync(opts.always ? (p.suggestions ?? []) : []);
     for (const b of this.suggestions.container.querySelectorAll('button')) b.disabled = busy;
     setHidden(this.always, ask || !opts.always || this.phase === 'deny');
+    // Modo: só no Claude Code; o modo em que a sessão já está não aparece.
+    setHidden(this.modes, ask || codex || this.phase === 'deny');
+    for (const [mode, b] of this.modeBtns) {
+      setHidden(b, agent?.permissionMode === mode);
+      b.disabled = busy;
+    }
     setHidden(this.denyForm, this.phase !== 'deny');
     setHidden(this.interruptRow, !opts.interrupt);
     setAttr(

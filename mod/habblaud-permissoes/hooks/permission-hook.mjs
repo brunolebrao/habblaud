@@ -128,6 +128,9 @@ export function answersFor(answers, toolInput) {
  * escolhida na página volta só como a POSIÇÃO: aplica-se a sugestão original que o Claude Code mandou.
  * Pergunta (AskUserQuestion): só `answer` aprova (sem `answers` a chamada não teria resposta); recusar vale.
  */
+/** Modos que o Habblaud pode pedir ao aprovar (bypassPermissions nunca). */
+const MODES = new Set(['default', 'acceptEdits', 'plan', 'auto']);
+
 export function decisionOutput(result, input) {
   if (!result || result.status !== 'decided') return undefined;
   const ask = input?.tool_name === ASK_TOOL;
@@ -142,7 +145,10 @@ export function decisionOutput(result, input) {
     const decision = { behavior: 'allow' };
     const list = Array.isArray(input?.permission_suggestions) ? input.permission_suggestions : [];
     const chosen = Number.isInteger(result.suggestion) ? list[result.suggestion] : undefined;
-    if (chosen && typeof chosen === 'object') decision.updatedPermissions = [chosen];
+    const updates = chosen && typeof chosen === 'object' ? [chosen] : [];
+    // Aprovar e trocar o modo da sessão (Manual, Aceitar edições, Plano, Auto): a mesma mudança do diálogo do terminal.
+    if (MODES.has(result.mode)) updates.push({ type: 'setMode', mode: result.mode, destination: 'session' });
+    if (updates.length) decision.updatedPermissions = updates;
     return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
   }
   if (result.behavior === 'deny') {

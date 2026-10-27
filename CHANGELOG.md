@@ -18,6 +18,9 @@ do meio (0.**3**.0).
 - **Salas fixas (`HABBLAUD_FIXED_ROOMS`).** Pastas de projeto, separadas por vírgula, que ficam no prédio mesmo sem
   sessão aberta, com a luz apagada. Na gaveta da sala, **Novo agente aqui** abre o Novo agente com a pasta já escolhida.
   Salas fixas vazias não vão para o Habblaud World.
+- **Modo de permissão pelo escritório.** O Novo agente ganha a escolha do modo da sessão (Manual, Aceitar edições,
+  Plano ou Auto; `claude --permission-mode`), lembrada para a próxima vez. No cartão de permissão do Claude Code,
+  **Aprovar e mudar o modo da sessão** aprova e já troca o modo (o mesmo `setMode` do diálogo do terminal).
 - **Anexos nas mensagens.** A caixa de mensagem (gaveta do agente e terminal) ganha o 📎: imagens e arquivos, também
   colando um print com ⌘V ou soltando o arquivo na caixa. Eles são gravados em `~/.habblaud/attachments` e a mensagem
   leva os caminhos para o agente ler. No Docker, o `docker:up` monta só essa pasta com escrita.

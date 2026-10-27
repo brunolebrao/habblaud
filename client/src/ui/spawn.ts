@@ -21,6 +21,15 @@ const POLL_MS = 700;
  */
 const WAIT_MS = 90_000;
 const LAST_FOLDER_KEY = 'habblaud.spawn.folder';
+const MODE_KEY = 'habblaud.spawn.mode';
+/** Modos de permissão do Novo agente (server/spawn/spawn.ts SPAWN_MODES); '' = o padrão do Claude Code. */
+const MODES: Array<[string, string]> = [
+  ['', tr('Padrão do Claude Code')],
+  ['default', tr('Manual (pede aprovação)')],
+  ['acceptEdits', tr('Aceitar edições')],
+  ['plan', tr('Plano (só planeja)')],
+  ['auto', tr('Auto')],
+];
 
 interface SpawnInfo {
   id: string;
@@ -107,6 +116,7 @@ export class SpawnPanel {
   private readonly folder: HTMLInputElement;
   private readonly prompt: HTMLTextAreaElement;
   private readonly fileInput: HTMLInputElement;
+  private readonly modeSel: HTMLSelectElement;
   private readonly fileList: HTMLElement;
   private readonly dictate: DictationButton;
   private readonly submitBtn: HTMLButtonElement;
@@ -166,6 +176,21 @@ export class SpawnPanel {
       this.selected = this.folder.value.trim();
       this.renderFolders();
     });
+    this.modeSel = h('select', { class: 'ui-world__select ui-spawn__mode', attrs: { id: 'ui-spawn-mode', title: tr('Como a sessão nova pede permissão (claude --permission-mode)') } });
+    for (const [value, label] of MODES) this.modeSel.append(h('option', { attrs: { value }, text: label }));
+    try {
+      this.modeSel.value = localStorage.getItem(MODE_KEY) ?? '';
+    } catch {
+      // sem localStorage: fica no padrão
+    }
+    if (!MODES.some(([v]) => v === this.modeSel.value)) this.modeSel.value = '';
+    this.modeSel.addEventListener('change', () => {
+      try {
+        localStorage.setItem(MODE_KEY, this.modeSel.value);
+      } catch {
+        // sem localStorage: vale só desta vez
+      }
+    });
     const close = iconButton(ICONS.close, tr('Fechar'), () => this.hide(), 'ui-icon-btn--sm');
     this.el = h(
       'div',
@@ -181,6 +206,8 @@ export class SpawnPanel {
         h('label', { class: 'ui-spawn__label', attrs: { for: 'ui-spawn-prompt' }, text: tr('Pedido') }),
         this.prompt,
         h('div', { class: 'ui-spawn__tools' }, this.dictate.el, attachBtn, this.fileInput),
+        h('label', { class: 'ui-spawn__label', attrs: { for: 'ui-spawn-mode' }, text: tr('Modo') }),
+        this.modeSel,
         this.fileList,
         h('p', { class: 'ui-rename__hint', text: tr('Começa na hora uma sessão do Claude Code em segundo plano no computador, na pasta escolhida; as permissões chegam aqui. Pasta que o Claude Code ainda não conhece abre no app do Claude e espera o Enter lá. Anexos vão para ~/.habblaud/attachments e o pedido leva os caminhos.') }),
         this.submitBtn,
@@ -366,7 +393,7 @@ export class SpawnPanel {
       let info = await api<SpawnInfo>('/api/spawn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder, prompt: this.prompt.value, ...(ids.length ? { attachments: ids } : {}) }),
+        body: JSON.stringify({ folder, prompt: this.prompt.value, ...(this.modeSel.value ? { mode: this.modeSel.value } : {}), ...(ids.length ? { attachments: ids } : {}) }),
       });
       const end = Date.now() + WAIT_MS;
       while ((info.status === 'queued' || info.status === 'sent') && Date.now() < end) {

@@ -160,6 +160,9 @@ describe('novo agente em segundo plano (claude --bg)', () => {
     expect(cliArgs({ folder: '/p', prompt: 'doctor' })).toEqual(['--bg', '-n', 'Habblaud: doctor', '--', 'doctor']);
     expect(cliArgs({ folder: '/p', prompt: '--dangerously-skip-permissions' }).slice(-2)).toEqual(['--', '--dangerously-skip-permissions']);
     expect(cliArgs({ folder: '/p', prompt: '  ' })).toEqual(['--bg', '-n', 'Habblaud']);
+    expect(cliArgs({ folder: '/p', prompt: 'oi', mode: 'plan' })).toEqual(['--bg', '-n', 'Habblaud: oi', '--permission-mode', 'plan', '--', 'oi']);
+    expect(parseSpawn({ folder: '/p', prompt: '', mode: 'auto' })).toEqual({ folder: '/p', prompt: '', mode: 'auto' });
+    expect(parseSpawn({ folder: '/p', prompt: '', mode: 'bypassPermissions' })).toHaveProperty('error');
   });
 
   it('createCliRunner roda o binário na pasta, sem shell, e lê o id; erro vira a 1ª linha', async () => {

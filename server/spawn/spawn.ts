@@ -40,9 +40,15 @@ export const KEEP_MS = 10 * 60_000;
 const MAX_OPEN = 5;
 const ERROR_MAX = 300;
 
+/** Modos de permissão que o Novo agente oferece (`claude --permission-mode`); bypassPermissions fica de fora. */
+export const SPAWN_MODES = ['default', 'acceptEdits', 'plan', 'auto'] as const;
+export type SpawnMode = (typeof SPAWN_MODES)[number];
+
 export interface SpawnRequest {
   folder: string;
   prompt: string;
+  /** Modo de permissão da sessão nova (ausente = o padrão do Claude Code). Só no `claude --bg`: o link do app não leva. */
+  mode?: SpawnMode;
 }
 
 export type SpawnStatus = 'queued' | 'sent' | 'opened' | 'failed';
@@ -76,7 +82,8 @@ export function parseSpawn(raw: unknown): SpawnRequest | { error: string } {
     return { error: tr('escolha uma pasta (caminho absoluto, ex.: /Users/voce/projeto)') };
   }
   if (prompt.length > PROMPT_MAX || prompt.includes('\0')) return { error: tr('o pedido passa de {0} caracteres', [PROMPT_MAX]) };
-  return { folder, prompt };
+  if (r.mode !== undefined && !(SPAWN_MODES as readonly unknown[]).includes(r.mode)) return { error: tr('modo de permissão desconhecido') };
+  return r.mode ? { folder, prompt, mode: r.mode as SpawnMode } : { folder, prompt };
 }
 
 /** O link que o app do Claude entende (claude://code/new; `q` = pedido já escrito). */
@@ -97,7 +104,7 @@ export function sessionName(prompt: string): string {
 
 /** Argumentos do `claude`: o pedido depois de `--` (um pedido "doctor" ou "-x" continua sendo pedido). */
 export function cliArgs(req: SpawnRequest): string[] {
-  const args = ['--bg', '-n', sessionName(req.prompt)];
+  const args = ['--bg', '-n', sessionName(req.prompt), ...(req.mode ? ['--permission-mode', req.mode] : [])];
   return req.prompt.trim() ? [...args, '--', req.prompt] : args;
 }
 
@@ -247,7 +254,7 @@ export class SpawnService {
       e.at = this.now();
       const files = e.files.map((f) => ({ name: f.name, type: f.type, data: f.data.toString('base64') }));
       this.dropFiles(e);
-      out.push({ id: e.info.id, folder: e.req.folder, prompt: e.req.prompt, files });
+      out.push({ id: e.info.id, folder: e.req.folder, prompt: e.req.prompt, ...(e.req.mode ? { mode: e.req.mode } : {}), files });
     }
     return out;
   }
@@ -280,7 +287,7 @@ export class SpawnService {
     } finally {
       this.dropFiles(e);
     }
-    const req = { folder: e.req.folder, prompt: promptWithAttachments(e.req.prompt, paths) };
+    const req = { ...e.req, prompt: promptWithAttachments(e.req.prompt, paths) };
     this.resolve(e, await launch(req, opener, this.opts.cli));
   }
 

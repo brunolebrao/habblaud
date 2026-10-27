@@ -18,7 +18,10 @@
 import { randomBytes } from 'node:crypto';
 import { describeTool, maskSecrets, truncate } from '../../shared/activity';
 import { ANSWER_OTHER_MAX, answerSummary, ASK_TOOL, checkAnswers } from '../../shared/answers';
-import type { Activity, AgentInfo, PermissionAnswer, PermissionDecision, PermissionRequestInfo, PermissionSuggestionInfo } from '../../shared/types';
+import type { Activity, AgentInfo, PermissionAnswer, PermissionDecision, PermissionModeChoice, PermissionRequestInfo, PermissionSuggestionInfo } from '../../shared/types';
+
+/** Modos que a página pode pedir junto com a aprovação (PermissionDecision.mode). */
+const PERMISSION_MODE_CHOICES: readonly PermissionModeChoice[] = ['default', 'acceptEdits', 'plan', 'auto'];
 import { errMsg, log } from '../log';
 import { toolView } from '../sources/terminal';
 import { codexToolView } from './codex';
@@ -101,7 +104,7 @@ export type ReleaseReason = 'terminal' | 'answered' | 'expired' | 'orphan' | 'go
  */
 export type WaitResult =
   | { status: 'pending' }
-  | { status: 'decided'; behavior: 'allow' | 'deny'; message?: string; interrupt?: boolean; suggestion?: number }
+  | { status: 'decided'; behavior: 'allow' | 'deny'; message?: string; interrupt?: boolean; suggestion?: number; mode?: PermissionModeChoice }
   | { status: 'decided'; behavior: 'answer'; answers: PermissionAnswer[] }
   | { status: 'released'; reason: ReleaseReason };
 
@@ -173,7 +176,7 @@ function isQuestion(info: { tool: string; provider?: string }): boolean {
 
 /** O Codex não aceita interromper nem "sempre permitir" (o hook dele só aprova ou recusa com motivo). */
 function unsupportedByCodex(info: PermissionRequestInfo, d: PermissionDecision): boolean {
-  return info.provider === 'codex' && (d.interrupt === true || d.suggestion !== undefined);
+  return info.provider === 'codex' && (d.interrupt === true || d.suggestion !== undefined || d.mode !== undefined);
 }
 
 /**
@@ -338,6 +341,10 @@ export function parseDecision(raw: unknown): PermissionDecision | undefined {
   if (r.behavior === 'allow' && r.suggestion !== undefined) {
     if (typeof r.suggestion !== 'number' || !Number.isInteger(r.suggestion) || r.suggestion < 0) return undefined;
     d.suggestion = r.suggestion;
+  }
+  if (r.behavior === 'allow' && r.mode !== undefined) {
+    if (!(PERMISSION_MODE_CHOICES as readonly unknown[]).includes(r.mode)) return undefined;
+    d.mode = r.mode as PermissionModeChoice;
   }
   return d;
 }
@@ -520,11 +527,12 @@ export class PermissionRegistry {
     if (d.message) outcome.message = d.message;
     if (d.interrupt) outcome.interrupt = true;
     if (d.suggestion !== undefined) outcome.suggestion = d.suggestion;
+    if (d.mode) outcome.mode = d.mode;
     this.resolve(p, outcome);
     const now = this.now();
     const act: Activity =
       d.behavior === 'allow'
-        ? { id: `${p.agentId}#perm-ok:${id}`, at: now, kind: 'other', icon: '✅', text: d.suggestion !== undefined ? tr('Aprovado no Habblaud (sempre permitir)') : tr('Aprovado no Habblaud'), detail: p.info.title, tool: 'PermissionRequest' }
+        ? { id: `${p.agentId}#perm-ok:${id}`, at: now, kind: 'other', icon: '✅', text: d.mode ? tr('Aprovado no Habblaud (modo: {0})', [d.mode]) : d.suggestion !== undefined ? tr('Aprovado no Habblaud (sempre permitir)') : tr('Aprovado no Habblaud'), detail: p.info.title, tool: 'PermissionRequest' }
         : { id: `${p.agentId}#perm-no:${id}`, at: now, kind: 'wait', icon: '🚫', text: tr('Recusado no Habblaud'), detail: d.message ? `${p.info.title} — ${d.message}` : p.info.title, tool: 'PermissionRequest' };
     this.opts.office.addActivity(p.agentId, act, false);
     return 'ok';

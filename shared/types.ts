@@ -688,6 +688,9 @@ export interface PermissionAnswer {
 }
 
 /** Corpo de POST /api/permissions/:id/decision (vindo da página). */
+/** Modos que o Habblaud oferece ao aprovar (bypassPermissions fica de fora). */
+export type PermissionModeChoice = 'default' | 'acceptEdits' | 'plan' | 'auto';
+
 export interface PermissionDecision {
   /**
    * allow = aprovar; deny = recusar; terminal = devolver o pedido ao terminal (o hook sai sem decidir);
@@ -700,6 +703,8 @@ export interface PermissionDecision {
   interrupt?: boolean;
   /** Aprovação: aplica junto a sugestão desta posição (PermissionSuggestionInfo.index). */
   suggestion?: number;
+  /** Aprovação: troca também o modo de permissão da sessão (só Claude Code; o hook manda `setMode`). */
+  mode?: PermissionModeChoice;
   /** Resposta (`answer`): uma por pergunta do pedido. */
   answers?: PermissionAnswer[];
 }

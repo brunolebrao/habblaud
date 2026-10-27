@@ -99,6 +99,21 @@ describe('permission-hook.mjs (processo)', () => {
     expect(JSON.parse(r.stdout)).toEqual({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } });
   });
 
+  it('aprovar e mudar o modo: setMode na sessão, junto da sugestão escolhida; modo estranho é ignorado', async () => {
+    srv = await servePermissions();
+    const input = hookJson();
+    const run = runHook(JSON.stringify(input), ['--port', String(srv.port)]);
+    srv.registry!.decide(await pendingId(srv), { behavior: 'allow', suggestion: 0, mode: 'acceptEdits' });
+    const out = JSON.parse((await run).stdout);
+    expect(out.hookSpecificOutput.decision).toEqual({
+      behavior: 'allow',
+      updatedPermissions: [(input.permission_suggestions as unknown[])[0], { type: 'setMode', mode: 'acceptEdits', destination: 'session' }],
+    });
+    expect(decisionOutput({ status: 'decided', behavior: 'allow', mode: 'bypassPermissions' }, hookJson())).toEqual({
+      hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
+    });
+  });
+
   it('"sempre permitir": aplica a sugestão ORIGINAL do stdin pela posição', async () => {
     srv = await servePermissions();
     const input = hookJson();

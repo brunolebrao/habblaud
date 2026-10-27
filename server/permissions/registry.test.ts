@@ -241,6 +241,12 @@ describe('PermissionRegistry: perguntas (AskUserQuestion)', () => {
     expect(commit.notices[0]!.text).not.toContain('abcdef123456');
   });
 
+  it('decisão com modo: só ao aprovar e só os modos oferecidos (nunca bypassPermissions)', () => {
+    expect(parseDecision({ behavior: 'allow', mode: 'auto' })).toEqual({ behavior: 'allow', mode: 'auto' });
+    expect(parseDecision({ behavior: 'allow', mode: 'bypassPermissions' })).toBeUndefined();
+    expect(parseDecision({ behavior: 'deny', mode: 'auto' })).toEqual({ behavior: 'deny' });
+  });
+
   it('responder: a espera recebe as respostas por posição (normalizadas) e a linha do tempo ganha o resumo', async () => {
     const { office, registry } = setup();
     const id = registered(registry.register(askInput()));
