@@ -5,10 +5,11 @@
 //   nunca mudam de conteúdo, então podem ficar em cache por 1 ano (immutable);
 // - todo o resto (index.html e client/public: /assets/brand, /assets/art, manifest.json...) tem nome
 //   fixo e pode mudar a cada build: `no-cache` + ETag/Last-Modified, e o navegador revalida (304).
-import { createReadStream, statSync, type Stats } from 'node:fs';
+import { createReadStream, readFileSync, statSync, type Stats } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { tr } from '../../shared/i18n';
+import { brandText } from '../brand';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -39,7 +40,7 @@ export const HASHED_DIR = '/bundle/';
 export const IMMUTABLE = 'public, max-age=31536000, immutable';
 export const REVALIDATE = 'no-cache';
 
-function fileStat(p: string): Stats | undefined {
+export function fileStat(p: string): Stats | undefined {
   try {
     const st = statSync(p);
     return st.isFile() ? st : undefined;
@@ -70,35 +71,59 @@ export function isNotModified(req: IncomingMessage, etag: string, mtimeMs: numbe
   return false;
 }
 
-export function createStaticHandler(distDir: string): (req: IncomingMessage, res: ServerResponse, pathname: string) => void {
+/**
+ * Manda um arquivo com cache por ETag/Last-Modified. Com `brand`, troca "Habblaud" pelo nome da marca no texto
+ * (index.html e manifest; ver server/brand.ts).
+ */
+export function sendFile(req: IncomingMessage, res: ServerResponse, file: string, st: Stats, cache: string, brand?: string): void {
+  // Com marca, o ETag muda junto com o nome (o navegador não reaproveita a cópia com o nome antigo).
+  const etag = brand ? etagOf(st).replace(/"$/, `-${Buffer.from(brand).toString('hex')}"`) : etagOf(st);
+  const headers: Record<string, string | number> = {
+    'Cache-Control': cache,
+    ETag: etag,
+    'Last-Modified': new Date(st.mtimeMs).toUTCString(),
+    'X-Content-Type-Options': 'nosniff',
+    // A página não deve ser embutida em sites de terceiros (clickjacking nas configurações).
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+  };
+  if (isNotModified(req, etag, st.mtimeMs)) {
+    res.writeHead(304, headers);
+    return void res.end();
+  }
+  const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream';
+  if (brand) {
+    let body: Buffer;
+    try {
+      body = Buffer.from(brandText(readFileSync(file, 'utf8'), brand));
+    } catch {
+      return void res.destroy();
+    }
+    res.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length });
+    return void res.end(req.method === 'HEAD' ? undefined : body);
+  }
+  res.writeHead(200, {
+    ...headers,
+    'Content-Type': type,
+    'Content-Length': st.size,
+  });
+  if (req.method === 'HEAD') return void res.end();
+  createReadStream(file)
+    .on('error', () => res.destroy())
+    .pipe(res);
+}
+
+/** `brandName`: marca própria (server/brand.ts), posta no lugar de "Habblaud" no index.html e no manifest. */
+export function createStaticHandler(
+  distDir: string,
+  opts: { brandName?: string } = {},
+): (req: IncomingMessage, res: ServerResponse, pathname: string) => void {
   const root = resolve(distDir);
   const index = join(root, 'index.html');
+  const branded = new Set([index, join(root, 'manifest.webmanifest')]);
 
-  const send = (req: IncomingMessage, res: ServerResponse, file: string, st: Stats, cache: string) => {
-    const etag = etagOf(st);
-    const headers: Record<string, string | number> = {
-      'Cache-Control': cache,
-      ETag: etag,
-      'Last-Modified': new Date(st.mtimeMs).toUTCString(),
-      'X-Content-Type-Options': 'nosniff',
-      // A página não deve ser embutida em sites de terceiros (clickjacking nas configurações).
-      'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'no-referrer',
-    };
-    if (isNotModified(req, etag, st.mtimeMs)) {
-      res.writeHead(304, headers);
-      return void res.end();
-    }
-    res.writeHead(200, {
-      ...headers,
-      'Content-Type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
-      'Content-Length': st.size,
-    });
-    if (req.method === 'HEAD') return void res.end();
-    createReadStream(file)
-      .on('error', () => res.destroy())
-      .pipe(res);
-  };
+  const send = (req: IncomingMessage, res: ServerResponse, file: string, st: Stats, cache: string) =>
+    sendFile(req, res, file, st, cache, opts.brandName && branded.has(file) ? opts.brandName : undefined);
 
   return (req, res, pathname) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {

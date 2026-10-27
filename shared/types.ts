@@ -377,7 +377,21 @@ export interface OfficeSnapshot {
      * e à linha do tempo). Ausente nos testes e no timelapse.
      */
     world?: WorldMeta;
+    /** Marca própria (server/brand.ts, brand.json): nome e imagens no lugar de "Habblaud". Ausente = Habblaud. */
+    brand?: BrandInfo;
   };
+}
+
+/** Marca própria (brand.json na pasta HABBLAUD_BRAND_DIR): só aparência local, nunca vai para o Habblaud World. */
+export interface BrandInfo {
+  /** Nome no lugar de "Habblaud" (barra do topo, aba, placa da recepção, login do celular, PWA). */
+  name: string;
+  /** Imagem do logo (arquivo na pasta da marca, servido em /brand/<arquivo>). */
+  logo?: string;
+  /** Imagem da placa da recepção (idem); sem ela, a placa mostra o nome. */
+  sign?: string;
+  /** Cor de destaque da interface (#rrggbb). */
+  accent?: string;
 }
 
 /**

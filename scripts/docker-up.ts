@@ -60,6 +60,8 @@ const USAGE_DIR = process.env.HABBLAUD_USAGE_DIR?.trim() ? resolve(process.env.H
 const CONTAINER_USAGE_DIR = '/usage';
 /** Onde o container lê o certificado do acesso remoto (server/http/remote.ts). */
 const CONTAINER_REMOTE_TLS_DIR = '/remote-tls';
+/** Marca própria (server/brand.ts): ~/.habblaud/brand do host, somente leitura. */
+const CONTAINER_BRAND_DIR = '/brand';
 const SERVICE = 'habblaud';
 /** Raiz das montagens dentro do container: /claude/<conta>/{projects,sessions}. */
 const CONTAINER_ROOT = '/claude';
@@ -319,6 +321,7 @@ export function renderOverride(
   extraPorts: string[] = [],
   hiddenDirs: string[] = [],
   fixedRooms: string[] = [],
+  brandDir?: string,
 ): string {
   const env: Array<[string, string]> = [
     ['HABBLAUD_CLAUDE_DIRS', mounts.map((m) => m.mountDir).join(',')],
@@ -329,6 +332,7 @@ export function renderOverride(
   if (timeZone) env.push(['TZ', timeZone]);
   if (hiddenDirs.length) env.push(['HABBLAUD_IGNORE_DIRS', hiddenDirs.join(',')]);
   if (fixedRooms.length) env.push(['HABBLAUD_FIXED_ROOMS', fixedRooms.join(',')]);
+  if (brandDir) env.push(['HABBLAUD_BRAND_DIR', CONTAINER_BRAND_DIR]);
   const lines = [
     `# Gerado por scripts/docker-up.ts em ${generatedAt.toISOString()} — não edite: é recriado a cada \`npm run docker:up\`.`,
     '# Contém caminhos do host e e-mails das contas: fica fora do git e com permissão 600.',
@@ -345,6 +349,7 @@ export function renderOverride(
   if (usageDir) binds.push({ source: usageDir, target: CONTAINER_USAGE_DIR });
   // Acesso remoto: SÓ a pasta do certificado do servidor (a chave da CA fica no host).
   if (remoteTlsDir) binds.push({ source: remoteTlsDir, target: CONTAINER_REMOTE_TLS_DIR });
+  if (brandDir) binds.push({ source: brandDir, target: CONTAINER_BRAND_DIR });
   if (binds.length) {
     lines.push('    volumes:');
     for (const b of binds) {
@@ -449,6 +454,16 @@ export function envFileKeys(text: string): string[] {
     if (m) keys.push(m[1]);
   }
   return keys;
+}
+
+/** Pasta da marca própria no host (~/.habblaud/brand com brand.json; caminho real), ou undefined. */
+export function brandDirFor(home: string): string | undefined {
+  const dir = join(home, '.habblaud', 'brand');
+  try {
+    return statSync(join(dir, 'brand.json')).isFile() ? realpathSync(dir) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -731,8 +746,14 @@ async function up(opts: Options, port: number): Promise<void> {
   if (hiddenDirs.length) say(tr('Pastas escondidas do escritório: {0}.', [hiddenDirs.map((d) => tildify(d)).join(', ')]));
   const fixedRooms = dirListFor('HABBLAUD_FIXED_ROOMS', process.env, envFile, HOME);
   if (fixedRooms.length) say(tr('Salas fixas: {0}.', [fixedRooms.map((d) => tildify(d)).join(', ')]));
+  const brandDir = brandDirFor(HOME);
+  if (brandDir) say(tr('Marca própria: monta {0} em {1}, somente leitura.', [tildify(brandDir), CONTAINER_BRAND_DIR]));
   const tmp = `${OVERRIDE_FILE}.tmp`;
-  writeFileSync(tmp, renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms), { mode: 0o600 });
+  writeFileSync(
+    tmp,
+    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir),
+    { mode: 0o600 },
+  );
   chmodSync(tmp, 0o600);
   renameSync(tmp, OVERRIDE_FILE);
   say(tr('docker-compose.override.yml gerado.'));

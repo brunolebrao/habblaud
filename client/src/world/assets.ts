@@ -40,13 +40,23 @@ interface Manifest {
 }
 
 function loadImage(file: string): Promise<HTMLImageElement | null> {
+  return loadSrc(`/assets/${file.replace(/^\/+/, '')}`);
+}
+
+function loadSrc(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
     const img = new Image();
     img.decoding = 'async';
     img.onload = () => resolve(img.naturalWidth > 0 ? img : null);
     img.onerror = () => resolve(null);
-    img.src = `/assets/${file.replace(/^\/+/, '')}`;
+    img.src = src;
   });
+}
+
+/** Imagem da marca própria (ex.: a placa da recepção, em /brand/<arquivo>; ver ui/brand.ts). */
+export async function loadBrandAsset(src: string): Promise<BrandAsset | undefined> {
+  const img = await loadSrc(src);
+  return img ? { img, w: img.naturalWidth, h: img.naturalHeight } : undefined;
 }
 
 function validFile(f: unknown): f is ManifestFile {

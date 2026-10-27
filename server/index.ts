@@ -11,7 +11,8 @@ import { createApiHandler, sendJson } from './http/app';
 import { createRequestGuard, isLoopbackHost } from './http/guard';
 import { createRemoteGate, isRemoteRequest, loadSecret, RemoteSessions, startRemoteListener, type RemoteListener } from './http/remote';
 import { Hub } from './http/sse';
-import { createStaticHandler } from './http/static';
+import { createStaticHandler, fileStat, REVALIDATE, sendFile } from './http/static';
+import { brandFile, loadBrand } from './brand';
 import { TerminalStreams } from './http/terminal';
 import { createTimelineHandler } from './http/timeline';
 import { TIMELINE_DIR, TimelineRecorder } from './history/timeline';
@@ -61,6 +62,8 @@ import { BuildingUplink } from './world/uplink';
 import { WorldViewer } from './world/viewer';
 
 const config = loadConfig();
+// Marca própria (brand.json): lida uma vez ao iniciar; mudou, reinicie.
+const brandLoad = loadBrand(config.brandDir);
 const startedAt = Date.now();
 
 // Nome antigo (CodeTown, até a 0.3.2): leva ~/.codetown para ~/.habblaud antes de ler qualquer estado e avisa
@@ -118,6 +121,7 @@ const office = new Office({
   names,
   roomAlias: (path) => roomAliases.get(path),
   fixedRooms: config.fixedRooms,
+  brand: brandLoad.brand,
   version: config.version,
   // No modo dev o Vite serve o cliente direto do código-fonte: não há build para comparar.
   build: config.dev ? undefined : createBuildReader(config.rootDir),
@@ -406,8 +410,18 @@ if (config.dev) {
   closeVite = () => vite.close();
   fallback = (req, res) => vite.middlewares(req, res);
 } else {
-  const serveStatic = createStaticHandler(join(config.rootDir, 'dist', 'client'));
+  const serveStatic = createStaticHandler(join(config.rootDir, 'dist', 'client'), { brandName: brandLoad.brand?.name });
   fallback = (req, res, url) => serveStatic(req, res, url.pathname);
+}
+// Imagens da marca própria (/brand/<arquivo>), no dev e na produção.
+if (brandLoad.brand) {
+  const app = fallback;
+  fallback = (req, res, url) => {
+    const file = brandFile(config.brandDir, url.pathname);
+    const st = file && (req.method === 'GET' || req.method === 'HEAD') ? fileStat(file) : undefined;
+    if (file && st) return sendFile(req, res, file, st, REVALIDATE);
+    app(req, res, url);
+  };
 }
 
 // Host/Origin/Content-Type: barra DNS rebinding e CSRF antes de qualquer rota (inclusive o Vite).
@@ -443,6 +457,7 @@ if (config.remote) {
     sessions: new RemoteSessions(loadSecret(join(config.dataDir, 'remote-secret')), remote, Date.now, join(config.dataDir, 'remote-revoked.json')),
     secure: !!remote.tls,
     caFile: remote.tls?.caFile,
+    brandName: brandLoad.brand?.name,
   });
   remoteListener = startRemoteListener(
     remote,
@@ -497,6 +512,8 @@ server.listen(config.port, config.host, () => {
   }
   if (config.hiddenDirs.length) log.info(tr('   Pastas escondidas do escritório: {0}.', [config.hiddenDirs.join(', ')]));
   if (config.fixedRooms.length) log.info(tr('   Salas fixas: {0}.', [config.fixedRooms.join(', ')]));
+  if (brandLoad.brand) log.info(tr('   Marca própria: {0} ({1}).', [brandLoad.brand.name, config.brandDir]));
+  for (const w of brandLoad.warnings) log.warn(w);
   if (office.isDemo()) log.info(tr('   Modo demonstração ligado (agentes simulados misturados aos reais).'));
   if (config.terminal) log.info(tr('   Terminal: ligado (acesso só local).'));
   else log.info(tr('   Terminal: desligado ({0}).', [terminalOffReason(process.env, config.host, config.inDocker)]));

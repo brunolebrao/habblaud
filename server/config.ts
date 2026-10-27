@@ -63,6 +63,8 @@ export interface ServerConfig {
    * já expandidas com o $HOME do host (docker-up).
    */
   fixedRooms: string[];
+  /** Pasta da marca própria (server/brand.ts): HABBLAUD_BRAND_DIR ou <dataDir>/brand. */
+  brandDir: string;
   /** Segunda porta, com login, para o celular na rede local (http/remote.ts); ausente = desligada. */
   remote?: RemoteConfig;
   /** Por que o acesso remoto ficou desligado quando as variáveis estão incompletas. */
@@ -241,6 +243,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
   const host = env.HABBLAUD_HOST?.trim() || '127.0.0.1';
   const pkg = readPackage(rootDir);
   const remote = parseRemoteConfig(env, inDocker);
+  const dataDir = resolve(env.HABBLAUD_DATA_DIR?.trim() || (inDocker ? '/data' : join(home, '.habblaud')));
   return {
     port: Number.isFinite(port) && port > 0 && port < 65536 ? port : 4747,
     host,
@@ -249,7 +252,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
     inDocker,
     home,
     claudeDirs: discoverClaudeDirs(env, home),
-    dataDir: resolve(env.HABBLAUD_DATA_DIR?.trim() || (inDocker ? '/data' : join(home, '.habblaud'))),
+    dataDir,
     usageDir: resolve(env.HABBLAUD_USAGE_DIR?.trim() || join(home, '.habblaud', 'usage')),
     allowedHosts: parseAllowedHosts(env.HABBLAUD_ALLOWED_HOSTS),
     terminal: terminalOffReason(env, host, inDocker) === undefined,
@@ -262,6 +265,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
     codex: !env.HABBLAUD_CODEX?.trim() || isTruthy(env.HABBLAUD_CODEX),
     hiddenDirs: parseHiddenDirs(env.HABBLAUD_IGNORE_DIRS, home),
     fixedRooms: parseDirList(env.HABBLAUD_FIXED_ROOMS, home),
+    brandDir: resolve(env.HABBLAUD_BRAND_DIR?.trim() || join(dataDir, 'brand')),
     remote: remote.config,
     remoteWarning: remote.warning,
     world: parseWorldConfig(env, argv),

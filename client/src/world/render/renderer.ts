@@ -128,6 +128,9 @@ export class Renderer {
     this.lighting = new Lighting(art, sim);
   }
 
+  /** Nome da marca própria (meta.brand) na placa da recepção; ausente = Habblaud. */
+  brandName: string | undefined;
+
   setAssets(a: WorldAssets | null): void {
     this.assets = a;
     this.assetsVersion++;

@@ -8,6 +8,7 @@ import { formatDateTime, relativeTime } from './format';
 import { pixelIcon } from './icons';
 import { safeLocalStorage } from './prefs';
 import { tr } from '../../../shared/i18n';
+import { onBrand } from './brand';
 
 /** Última versão nova já avisada neste navegador (o aviso sai uma vez por versão). */
 export const UPDATE_SEEN_KEY = 'habblaud:update-seen';
@@ -130,8 +131,13 @@ export class AboutGroup {
   private checking = false;
   private failure: string | undefined;
 
+  private readonly brandLine: HTMLElement;
+
   constructor(private ctx: UiContext) {
     this.name = h('strong', { class: 'ui-about__version' });
+    // Marca própria: "Lebre HQ · baseado no Habblaud v1.0.3" (o crédito ao projeto fica).
+    this.brandLine = h('span');
+    onBrand((b) => setText(this.brandLine, b ? `${tr('{0} · baseado no', [b.name])} ` : ''));
     this.checkBtn = h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text: tr('Verificar agora'), on: { click: () => void this.check() } });
     this.status = h('p', { class: 'ui-about__status', role: 'status' });
     this.notes = h('a', { class: 'ui-link-btn', attrs: { target: '_blank', rel: 'noopener noreferrer' } });
@@ -156,7 +162,7 @@ export class AboutGroup {
       'div',
       { class: 'ui-set-group ui-about', attrs: { id: 'ui-about' } },
       h('h3', { text: tr('Sobre'), tabIndex: -1 }),
-      h('div', { class: 'ui-about__head' }, h('span', { class: 'ui-about__name' }, 'Habblaud ', this.name), this.checkBtn),
+      h('div', { class: 'ui-about__head' }, h('span', { class: 'ui-about__name' }, this.brandLine, 'Habblaud ', this.name), this.checkBtn),
       this.status,
       this.fresh,
       this.repo,

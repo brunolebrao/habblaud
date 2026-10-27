@@ -299,7 +299,9 @@ function esc(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function loginPage(opts: { caDownload: boolean }): string {
+/** `brandName`: marca própria (server/brand.ts) no lugar de "Habblaud" no título e no cabeçalho. */
+export function loginPage(opts: { caDownload: boolean; brandName?: string }): string {
+  const name = opts.brandName ?? 'Habblaud';
   const ca = opts.caDownload
     ? `<p class="ca">${esc(tr('Primeira vez neste celular?'))} <a href="${CA_PATH}" download="habblaud-ca.crt">${esc(tr('Instale o certificado do Habblaud'))}</a> ${esc(tr('para tirar o aviso de segurança (confira a impressão digital que o npm run remote:setup mostrou).'))}</p>`
     : '';
@@ -311,12 +313,12 @@ export function loginPage(opts: { caDownload: boolean }): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>${esc(tr('Habblaud · entrar'))}</title>
+<title>${esc(tr('Habblaud · entrar').replace('Habblaud', name))}</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Habblaud">
+<meta name="apple-mobile-web-app-title" content="${esc(name)}">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <style>
   :root { color-scheme: dark; }
@@ -340,7 +342,7 @@ export function loginPage(opts: { caDownload: boolean }): string {
 </head>
 <body>
 <form id="f" autocomplete="on">
-  <h1>Habblaud</h1>
+  <h1>${esc(name)}</h1>
   <p>${esc(tr('Acesso pelo celular. Entre com o usuário e a senha que você escolheu no npm run remote:setup.'))}</p>
   <label for="u">${esc(tr('Usuário'))}</label>
   <input id="u" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
@@ -396,6 +398,8 @@ export interface RemoteGateDeps {
   throttle?: LoginThrottle;
   /** Conferência da senha (injetável nos testes; padrão: scrypt). */
   verify?: (password: string, hash: PasswordHash) => Promise<boolean>;
+  /** Marca própria na tela de login (server/brand.ts). */
+  brandName?: string;
 }
 
 /**
@@ -491,7 +495,7 @@ export function createRemoteGate(deps: RemoteGateDeps): (req: IncomingMessage, r
       if (authed) {
         res.writeHead(302, { Location: '/', 'Cache-Control': 'no-store' });
         res.end();
-      } else sendHtml(res, loginPage({ caDownload: caAvailable() }));
+      } else sendHtml(res, loginPage({ caDownload: caAvailable(), brandName: deps.brandName }));
       return true;
     }
 

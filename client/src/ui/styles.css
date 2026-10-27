@@ -661,6 +661,24 @@
   image-rendering: pixelated;
 }
 
+/* Logo da marca própria: arte em pixels, ampliada sem borrar. */
+.ui-brand__logo--own {
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+/* Marca própria (ui/brand.ts): o nome em texto, na mesma altura e nas cores do logotipo em pixels. */
+.ui-wordmark--text {
+  width: auto;
+  max-width: 220px;
+  overflow: hidden;
+  font: 600 20px/24px var(--font-px);
+  color: #f4f1ea;
+  text-shadow: 2px 2px 0 rgba(6, 8, 14, 0.62);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .ui-topbar__status {
   display: flex;
   align-items: center;
@@ -3319,6 +3337,13 @@
 .ui-splash__name .ui-wordmark {
   width: 225px;
   height: 40px;
+}
+
+.ui-splash__name .ui-wordmark--text {
+  width: auto;
+  max-width: none;
+  font-size: 34px;
+  line-height: 40px;
 }
 
 .ui-splash__text {

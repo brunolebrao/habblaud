@@ -6,8 +6,8 @@ import type { SoundBoard } from '../audio/board';
 import type { UiComponent, UiContext } from './context';
 import { computeCounters } from './model';
 import { tr } from '../../../shared/i18n';
+import { brandName } from './brand';
 
-const BASE_TITLE = 'Habblaud';
 
 export type NotificationState = 'unsupported' | 'default' | 'granted' | 'denied';
 
@@ -40,7 +40,8 @@ export class Notifier implements UiComponent {
   render(): void {
     // Ao vivo, mesmo durante o timelapse: o título da aba avisa quem precisa de você agora.
     const waiting = computeCounters(this.ctx.store.liveSnapshot).waiting;
-    const title = waiting > 0 ? `(${waiting}) ${BASE_TITLE}` : BASE_TITLE;
+    const base = brandName();
+    const title = waiting > 0 ? `(${waiting}) ${base}` : base;
     if (title !== this.lastTitle) {
       this.lastTitle = title;
       document.title = title;
@@ -54,7 +55,7 @@ export class Notifier implements UiComponent {
     else if (n.level === 'success') this.sounds.play('pop');
     if (n.level === 'alert' && prefs.browserNotifications && document.hidden && notificationState() === 'granted') {
       try {
-        const notification = new Notification(tr('Habblaud — precisa de você'), {
+        const notification = new Notification(tr('Habblaud — precisa de você').replace('Habblaud', brandName()), {
           body: n.text,
           tag: n.agentId ?? n.id,
           icon: '/assets/brand/favicon-32.png',

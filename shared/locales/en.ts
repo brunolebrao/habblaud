@@ -3279,4 +3279,12 @@ export const EN: Readonly<Record<string, string>> = {
   "Carimbo deixado na portaria: {0}": "Stamp left at the front desk: {0}",
   "Entre no prédio ou chegue mais perto da porta para carimbar.": "Go into the building or get closer to the door to stamp.",
   "O carimbo não foi deixado. Tente de novo.": "The stamp wasn't left. Try again.",
+  "{0} · baseado no": "{0} · based on",
+  "brand.json precisa ser um objeto JSON": "brand.json must be a JSON object",
+  "brand.json: \"name\" precisa ter de 1 a {0} caracteres, sem < > \" & nem barra invertida": "brand.json: \"name\" must be 1 to {0} characters, without < > \" & or backslash",
+  "brand.json: \"{0}\" precisa ser só o nome de uma imagem da pasta (png, webp, jpg ou gif)": "brand.json: \"{0}\" must be just the name of an image in the folder (png, webp, jpg or gif)",
+  "brand.json: \"accent\" precisa ser uma cor como #7cc8ff": "brand.json: \"accent\" must be a color like #7cc8ff",
+  "brand.json não é um JSON válido": "brand.json is not valid JSON",
+  "   Marca própria: {0} ({1}).": "   Custom brand: {0} ({1}).",
+  "Marca própria: monta {0} em {1}, somente leitura.": "Custom brand: mounts {0} at {1}, read-only.",
 };

@@ -47,6 +47,7 @@ import { SceneSwitch, type CitySceneHost } from './world/scene-switch';
 import { worldSource } from '../net/world';
 import { FreeArea } from './viewport';
 import { tr } from '../../../shared/i18n';
+import { setBrand } from './brand';
 
 /** Relógio dos tempos relativos ("há 5 s"). */
 const CLOCK_MS = 5_000;
@@ -342,6 +343,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
 
   // ---------------------------------------------------------------- eventos
   store.on('snapshot', (snap) => {
+    setBrand(snap.meta.brand);
     // Ao vivo, o "agora" da interface segue o relógio do servidor (o aparelho pode estar adiantado ou atrasado).
     // No timelapse, quem manda é o instante reproduzido pelo player (parado quando pausado).
     if (store.connection === 'open' && !store.replaying) skew = snap.serverTime - Date.now();

@@ -11,6 +11,7 @@ import { focusPermission, nextPermissionAgent, permissionAgents } from './permis
 import { UsageCards } from './usage';
 import { VersionChip } from './version';
 import { wordmark } from './widgets';
+import { brandUrl, onBrand } from './brand';
 import { tr } from '../../../shared/i18n';
 
 interface CounterRefs {
@@ -67,6 +68,19 @@ export class TopBar implements UiComponent {
       mark.innerHTML = FALLBACK_MARK;
     });
     mark.append(logo);
+    // Marca própria com logo: a imagem dela (em escala nítida); sem logo, fica o do Habblaud.
+    onBrand((b) => {
+      const own = !!b?.logo;
+      if (own) {
+        logo.removeAttribute('srcset');
+        logo.setAttribute('src', brandUrl(b.logo!));
+      } else if (logo.getAttribute('src') !== '/assets/brand/logo-mark.png') {
+        logo.setAttribute('srcset', '/assets/brand/logo-mark@4x.png 4x');
+        logo.setAttribute('src', '/assets/brand/logo-mark.png');
+      }
+      logo.classList.toggle('ui-brand__logo--own', own);
+      if (!logo.isConnected) mark.replaceChildren(logo);
+    });
 
     this.pillText = h('span', { class: 'ui-pill__text' });
     this.pill = h('span', { class: 'ui-pill', role: 'status', attrs: { 'aria-live': 'polite' } }, h('span', { class: 'ui-pill__dot' }), this.pillText);

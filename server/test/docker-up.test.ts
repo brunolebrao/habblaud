@@ -132,6 +132,14 @@ describe('docker-up', () => {
     expect(codexDisabled({})).toBe(false);
   });
 
+  it('marca própria: monta a pasta do host em /brand, somente leitura', () => {
+    const mounts = planMounts(['/Users/fulano/.claude'], [acc('.claude')], slash);
+    const yml = renderOverride(mounts, new Date(0), undefined, undefined, [], undefined, [], [], [], '/Users/fulano/.habblaud/brand');
+    expect(yml).toContain('HABBLAUD_BRAND_DIR: "/brand"');
+    expect(yml).toMatch(/source: "\/Users\/fulano\/\.habblaud\/brand"\n\s+target: "\/brand"\n\s+read_only: true/);
+    expect(renderOverride(mounts)).not.toContain('HABBLAUD_BRAND_DIR');
+  });
+
   it('fuso do host vai para o container como TZ', () => {
     const mounts = planMounts(['/Users/fulano/.claude'], [acc('.claude')], slash);
     expect(renderOverride(mounts, new Date(0), undefined, 'America/Sao_Paulo')).toContain('TZ: "America/Sao_Paulo"');

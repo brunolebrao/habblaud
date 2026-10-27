@@ -8,6 +8,7 @@ import type {
   AgentInfo,
   AgentStats,
   AgentStatus,
+  BrandInfo,
   FeedItem,
   Notice,
   NoticeLevel,
@@ -58,6 +59,8 @@ export interface OfficeDeps {
   roomAlias?: (path: string) => string | undefined;
   /** Salas fixas (HABBLAUD_FIXED_ROOMS): pastas que ficam no prédio mesmo sem nenhum agente. */
   fixedRooms?: readonly string[];
+  /** Marca própria (server/brand.ts), posta em OfficeSnapshot.meta.brand. */
+  brand?: BrandInfo;
   version: string;
   /** Build do cliente servido (ver OfficeSnapshot.meta.build); ausente no modo dev e nos testes. */
   build?: () => string | undefined;
@@ -1017,6 +1020,7 @@ export class Office {
         ...(ptys ? { pty: ptys.status } : {}),
         updates: this.deps.updates?.(),
         ...(this.deps.world ? { world: this.deps.world() } : {}),
+        ...(this.deps.brand ? { brand: this.deps.brand } : {}),
       },
     };
   }

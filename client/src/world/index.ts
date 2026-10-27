@@ -4,14 +4,14 @@ import * as artModule from '../art';
 import { TILE, type ArtModule } from '../art/api';
 import type { OfficeStore } from '../net/store';
 import { DEFAULT_WORLD_OPTIONS, seasonalThemeFor, type Selection, type SocialEvent, type SoundCue, type WorldApi, type WorldOptions, type WorldPlayback } from './api';
-import { loadWorldAssets, type WorldAssets } from './assets';
+import { loadBrandAsset, loadWorldAssets, type BrandAsset, type WorldAssets } from './assets';
 import { Camera, overviewFrame } from './camera';
 import { createDebug, type WorldDebug } from './debug';
 import { BUILDING_H, COL_W } from './constants';
 import { RECEPTION_ID } from './layout/core';
 import { inRect } from './layout/geometry';
 import { attachInput, type Hit } from './input';
-import type { AgentInfo } from '../../../shared/types';
+import type { AgentInfo, BrandInfo } from '../../../shared/types';
 import { rebaseSnapshot } from './playback';
 import { Overlay } from './render/overlay';
 import { Renderer } from './render/renderer';
@@ -260,11 +260,39 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore, o: Cr
   const offSnapshot = store.on('snapshot', onSnapshot);
   if (store.snapshot) onSnapshot();
 
+  // Marca própria (ui/brand.ts): a placa da recepção vira a imagem dela ou, sem imagem, o nome escrito na placa padrão.
+  let baseAssets: WorldAssets | null = null;
+  let brandSign: { on: boolean; asset?: BrandAsset } = { on: false };
+  const pushAssets = () => {
+    assets = brandSign.on ? { ...(baseAssets ?? { wallArt: [] }), signage: brandSign.asset } : baseAssets;
+    renderer.setAssets(assets);
+  };
   void loadWorldAssets(abort.signal).then((a) => {
     if (!a) return;
-    assets = a;
-    renderer.setAssets(a);
+    baseAssets = a;
+    pushAssets();
   });
+  // Lida do snapshot (não de ui/brand.ts): na cena Visita, o snapshot é o do prédio visitado, sem a marca daqui.
+  let brandKey = '';
+  let brandName: string | undefined;
+  const syncBrand = (b: BrandInfo | undefined) => {
+    const key = JSON.stringify(b ?? null);
+    if (key === brandKey) return;
+    brandKey = key;
+    brandName = b?.name;
+    renderer.brandName = brandName;
+    const next = { on: !!b };
+    brandSign = next;
+    if (!b?.sign) return pushAssets();
+    void loadBrandAsset(`/brand/${encodeURIComponent(b.sign)}`).then((asset) => {
+      if (brandSign !== next || abort.signal.aborted) return;
+      brandSign = { on: true, asset };
+      pushAssets();
+    });
+  };
+  const offBrand = store.on('snapshot', (snap) => syncBrand(snap.meta.brand));
+  if (store.snapshot) syncBrand(store.snapshot.meta.brand);
+  abort.signal.addEventListener('abort', offBrand);
 
   // medições de texto em cache: refaz quando alguma fonte termina de carregar
   if (document.fonts) document.fonts.addEventListener?.('loadingdone', () => overlay.resetCaches(), { signal: abort.signal });
@@ -374,6 +402,7 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore, o: Cr
     sim = new Sim(art, () => options, playback ? null : undefined, { visit: visitMode });
     renderer = new Renderer(canvas, art, sim, camera);
     if (assets) renderer.setAssets(assets);
+    renderer.brandName = brandName;
     if (playback) {
       const p = playback;
       renderer.clock = () => p.clock();
