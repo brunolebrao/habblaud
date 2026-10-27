@@ -340,34 +340,65 @@ export function torch(): BufFurniture {
   return { base: s };
 }
 
-/** Barril com aros de ferro e torneira de latão (no lugar do bebedouro). */
+/** Barril com aros de ferro e torneira de latão (no lugar do bebedouro): bojudo, aduelas curvas, tampa oval. */
 export function barrel(): BufFurniture {
   const s = floorSheet(1, 1, 20);
   const b = s.buf;
-  const w = ramp('#8a5a3b', 0.07);
-  for (let y = -10; y <= 14; y++) {
-    const bulge = y > -6 && y < 10 ? 1 : 0;
-    b.hline(2 - bulge, 13 + bulge, y, w.base);
-    b.set(2 - bulge, y, w.lt);
-    b.set(13 + bulge, y, w.dk);
+  const w = ramp('#a3582a', 0.07);
+  const hoop = { hi: '#eef0fa', lt: '#b4b8cc', dk: '#5c6078', line: '#1c2030' };
+  // Silhueta: 18 px no meio, 14 px nas pontas (y = -11 a 13).
+  const edge = (y: number): [number, number] => {
+    const t = (y - 1) / 12;
+    const inset = Math.round(2 * t * t);
+    return [-1 + inset, 16 - inset];
+  };
+  for (let y = -11; y <= 13; y++) {
+    const [l, r] = edge(y);
+    b.hline(l, r, y, w.base);
+    b.set(l, y, w.lt);
+    b.set(l + 1, y, w.hi);
+    b.set(r - 1, y, w.dk);
+    b.set(r, y, shade(w.base, -0.3));
+    // Aduelas: as juntas seguem o bojo.
+    for (const f of [0.22, 0.42, 0.62, 0.82]) b.set(Math.round(l + f * (r - l)), y, shade(w.base, -0.22));
+    b.set(Math.round(l + 0.32 * (r - l)), y, shade(w.base, 0.06));
   }
-  for (const x of [5, 8, 11]) b.vline(x, -9, 14, w.dk);
-  for (const x of [4, 7, 10]) b.vline(x, -9, 14, shade(w.base, 0.04));
-  // Tampo.
-  b.ellipse(8, -11, 6, 2, w.lt);
-  b.hline(4, 11, -11, w.hi);
-  b.hline(3, 12, -10, w.dk);
-  // Aros.
-  for (const y of [-7, 2, 11]) {
-    b.hline(1, 14, y, IRON.base);
-    b.hline(2, 13, y - 1 >= -9 ? y - 1 : y, shade(IRON.base, 0.1));
+  // Aros: curvos (vistos de cima), mais baixos no meio.
+  for (const y0 of [-6, 8]) {
+    for (let x = -1; x <= 16; x++) {
+      const [l, r] = edge(y0);
+      if (x < l || x > r) continue;
+      const d = (x - 7.5) / 8.5;
+      const y = y0 + Math.round(1.6 * (1 - d * d));
+      b.set(x, y - 1, hoop.line);
+      b.set(x, y, x < 3 || x > 12 ? hoop.lt : hoop.hi);
+      b.set(x, y + 1, hoop.dk);
+      b.set(x, y + 2, hoop.line);
+    }
   }
-  // Torneira e caneca em cima.
-  b.rect(7, 5, 3, 2, BRASS.base);
-  b.set(7, 5, BRASS.hi);
-  b.set(9, 7, BRASS.dk);
-  mug(b, 9, -14, '#6e4a30');
+  // Tampa oval com tábuas.
+  const lid = ramp('#b8682f', 0.06);
+  const lidRows: [number, number, number][] = [
+    [-15, 3, 12],
+    [-14, 1, 14],
+    [-13, 0, 15],
+    [-12, 0, 15],
+    [-11, 1, 14],
+    [-10, 3, 12],
+  ];
+  for (const [y, l, r] of lidRows) {
+    b.hline(l, r, y, shade(w.base, -0.32));
+    if (y > -15 && y < -10) b.hline(l + 1, r - 1, y, lid.base);
+  }
+  b.hline(3, 12, -14, lid.lt);
+  b.hline(1, 14, -12, shade(lid.base, -0.12));
+  b.hline(4, 9, -13, lid.hi);
+  // Torneira de latão.
+  b.rect(7, 2, 2, 2, BRASS.base);
+  b.set(7, 2, BRASS.hi);
+  b.set(8, 4, BRASS.dk);
+  b.set(8, 5, '#7cc0e8');
   b.outline();
-  contact(b, 1, 13, 14, 4, 0.24);
+  contact(b, 0, 13, 16, 4, 0.24);
   return { base: s };
 }
