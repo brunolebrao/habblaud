@@ -45,6 +45,7 @@ import { makeClaudeRunner, MIN_CLAUDE_VERSION, readPackageVersion, updateInstall
 import { tr } from '../shared/i18n';
 import { readEnvValue } from '../server/remote/envfile';
 import { parseWorldConfig } from '../server/config';
+import { parseHiddenDirs } from '../server/sources/hidden';
 import { ensureServerCert, remoteTargets, remoteTlsBase, tlsPaths } from '../server/remote/tls';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -316,6 +317,7 @@ export function renderOverride(
   codex: AccountMount[] = [],
   remoteTlsDir?: string,
   extraPorts: string[] = [],
+  hiddenDirs: string[] = [],
 ): string {
   const env: Array<[string, string]> = [
     ['HABBLAUD_CLAUDE_DIRS', mounts.map((m) => m.mountDir).join(',')],
@@ -324,6 +326,7 @@ export function renderOverride(
   if (codex.length) env.push(['HABBLAUD_CODEX_DIRS', codex.map((m) => m.mountDir).join(',')]);
   if (usageDir) env.push(['HABBLAUD_USAGE_DIR', CONTAINER_USAGE_DIR]);
   if (timeZone) env.push(['TZ', timeZone]);
+  if (hiddenDirs.length) env.push(['HABBLAUD_IGNORE_DIRS', hiddenDirs.join(',')]);
   const lines = [
     `# Gerado por scripts/docker-up.ts em ${generatedAt.toISOString()} — não edite: é recriado a cada \`npm run docker:up\`.`,
     '# Contém caminhos do host e e-mails das contas: fica fora do git e com permissão 600.',
@@ -444,6 +447,15 @@ export function envFileKeys(text: string): string[] {
     if (m) keys.push(m[1]);
   }
   return keys;
+}
+
+/**
+ * Pastas escondidas do escritório (HABBLAUD_IGNORE_DIRS; o ambiente vale mais que o .env, como no Compose), expandidas
+ * com o $HOME do host: os transcripts guardam os caminhos do host, e no container o `~` seria outro.
+ */
+export function hiddenDirsFor(env: NodeJS.ProcessEnv, envFile: string, home: string): string[] {
+  const raw = 'HABBLAUD_IGNORE_DIRS' in env ? env.HABBLAUD_IGNORE_DIRS : readEnvValue(envFile, 'HABBLAUD_IGNORE_DIRS');
+  return parseHiddenDirs(raw, home);
 }
 
 /** As variáveis do Habblaud World que o docker-compose.yml repassa ao container. */
@@ -712,8 +724,10 @@ async function up(opts: Options, port: number): Promise<void> {
   if (usageDir) say(tr('Uso ao vivo (mod ou tap de statusline): monta {0} em {1}, somente leitura.', [tildify(USAGE_DIR), CONTAINER_USAGE_DIR]));
   const remoteTlsDir = prepareRemoteTls();
   const remotePorts = remoteTlsDir || remoteInsecure() ? remotePortsToPublish() : [];
+  const hiddenDirs = hiddenDirsFor(process.env, readEnvFile(), HOME);
+  if (hiddenDirs.length) say(tr('Pastas escondidas do escritório: {0}.', [hiddenDirs.map((d) => tildify(d)).join(', ')]));
   const tmp = `${OVERRIDE_FILE}.tmp`;
-  writeFileSync(tmp, renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts), { mode: 0o600 });
+  writeFileSync(tmp, renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs), { mode: 0o600 });
   chmodSync(tmp, 0o600);
   renameSync(tmp, OVERRIDE_FILE);
   say(tr('docker-compose.override.yml gerado.'));

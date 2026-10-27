@@ -1580,6 +1580,8 @@ export const FR: Readonly<Record<string, string>> = {
   "   Codex: {0} conta(s), {1} sessão(ões) aberta(s).": "   Codex : {0} compte(s), {1} session(s) ouverte(s).",
   "   Conta {0} do Codex ({1}): uso: {2} · {3}": "   Compte Codex {0} ({1}) : utilisation : {2} · {3}",
   "   Codex: {0}.": "   Codex : {0}.",
+  "   Pastas escondidas do escritório: {0}.": "   Dossiers masqués dans le bureau : {0}.",
+  "Pastas escondidas do escritório: {0}.": "Dossiers masqués dans le bureau : {0}.",
   "nenhuma pasta do Codex encontrada (defina HABBLAUD_CODEX_DIRS)": "aucun dossier Codex trouvé (définissez HABBLAUD_CODEX_DIRS)",
   "desligado (HABBLAUD_CODEX=0)": "désactivé (HABBLAUD_CODEX=0)",
   "   Modo demonstração ligado (agentes simulados misturados aos reais).": "   Mode démonstration activé (agents simulés mêlés aux vrais).",

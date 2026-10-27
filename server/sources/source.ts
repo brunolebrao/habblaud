@@ -153,6 +153,8 @@ export class HistorySet implements SessionLookup {
   constructor(
     providers: readonly HistoryProvider[] = [],
     private readonly limit = HISTORY_LIMIT,
+    /** Pasta escondida do escritório (HABBLAUD_IGNORE_DIRS): as sessões dela saem da listagem. */
+    private readonly hidden?: (path: string) => boolean,
   ) {
     for (const p of providers) this.add(p);
   }
@@ -174,7 +176,9 @@ export class HistorySet implements SessionLookup {
     for (const f of failures) {
       log.warnOnce(`history-list:${f.provider}:${errMsg(f.err)}`, tr('Histórico de sessões ({0}): falha ao listar ({1}).', [f.provider, errMsg(f.err)]));
     }
-    return out.sort((a, b) => b.lastAt - a.lastAt).slice(0, this.limit);
+    const hidden = this.hidden;
+    const shown = hidden ? out.filter((s) => !(s.project && hidden(s.project))) : out;
+    return shown.sort((a, b) => b.lastAt - a.lastAt).slice(0, this.limit);
   }
 
   resolve(account: string, sessionId: string): HistoryResolveResult {

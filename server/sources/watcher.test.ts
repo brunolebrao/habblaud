@@ -14,7 +14,7 @@ setQuiet(true);
 
 const CWD = '/projetos/loja';
 
-function setup(opts: { tailBytes?: number } = {}) {
+function setup(opts: { tailBytes?: number; hidden?: (cwd: string) => boolean } = {}) {
   const tmp = tempDir();
   const home = tmp.dir;
   const dir = join(home, '.claude');
@@ -41,7 +41,7 @@ function setup(opts: { tailBytes?: number } = {}) {
   });
   late.office = office;
   const alive = new Set<number>();
-  const watcher = new ClaudeWatcher({ accounts, office, inDocker: false, now, isAlive: (pid) => alive.has(pid), watch: false, tailBytes: opts.tailBytes });
+  const watcher = new ClaudeWatcher({ accounts, office, inDocker: false, now, isAlive: (pid) => alive.has(pid), watch: false, tailBytes: opts.tailBytes, hidden: opts.hidden });
   const notices: Notice[] = [];
 
   const ctx = {
@@ -462,6 +462,24 @@ describe('ClaudeWatcher', () => {
     const texts = c.notices.map((n) => n.text);
     expect(texts).toContain('🏗️ Nova sala: loja');
     expect(texts).toContain(`👋 ${a.name} chegou em loja (Conta A)`);
+  });
+});
+
+describe('ClaudeWatcher — pastas escondidas (HABBLAUD_IGNORE_DIRS)', () => {
+  it('sessão aberta numa pasta escondida não entra no escritório nem conta como aberta', () => {
+    const c = setup({ hidden: (cwd) => cwd.startsWith('/Users/eu/.claude-mem') });
+    try {
+      c.openSession(100, 'sess-a');
+      c.openSession(200, 'sess-mem', { cwd: '/Users/eu/.claude-mem/observer-sessions/21' });
+      c.watcher.boot();
+      c.poll();
+      expect(c.agents().map((a) => a.id)).toEqual(['.claude:100']);
+      expect(c.office.commit().snapshot.rooms.map((r) => r.id)).toEqual([CWD]);
+      expect(c.watcher.sources()[0].sessions).toBe(1);
+    } finally {
+      c.watcher.stop();
+      c.tmp.cleanup();
+    }
   });
 });
 

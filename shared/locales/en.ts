@@ -1716,6 +1716,8 @@ export const EN: Readonly<Record<string, string>> = {
   "   Codex: {0} conta(s), {1} sessão(ões) aberta(s).": "   Codex: {0} account(s), {1} open session(s).",
   "   Conta {0} do Codex ({1}): uso: {2} · {3}": "   Codex account {0} ({1}): usage: {2} · {3}",
   "   Codex: {0}.": "   Codex: {0}.",
+  "   Pastas escondidas do escritório: {0}.": "   Hidden folders in the office: {0}.",
+  "Pastas escondidas do escritório: {0}.": "Hidden folders in the office: {0}.",
   "nenhuma pasta do Codex encontrada (defina HABBLAUD_CODEX_DIRS)": "no Codex folder found (set HABBLAUD_CODEX_DIRS)",
   "desligado (HABBLAUD_CODEX=0)": "off (HABBLAUD_CODEX=0)",
   "   Modo demonstração ligado (agentes simulados misturados aos reais).": "   Demo mode on (simulated agents mixed in with the real ones).",

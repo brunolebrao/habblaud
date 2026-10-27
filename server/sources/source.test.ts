@@ -170,6 +170,18 @@ describe('HistorySet', () => {
     expect(await new HistorySet().list()).toEqual([]);
   });
 
+  it('pastas escondidas (HABBLAUD_IGNORE_DIRS) saem da listagem, antes do limite', async () => {
+    const at = (sessionId: string, lastAt: number, project?: string) => ({ ...session(undefined, '.claude', sessionId, lastAt), ...(project ? { project } : {}) });
+    const claude = fakeHistory('claude', ['.claude'], async () => [
+      at('mem', 50, '/Users/eu/.claude-mem/observer-sessions/21'),
+      at('app', 30, '/Users/eu/projetos/app'),
+      at('sem-projeto', 20),
+      at('lib', 10, '/Users/eu/projetos/lib'),
+    ]);
+    const hidden = (p: string) => p.startsWith('/Users/eu/.claude-mem');
+    expect((await new HistorySet([claude], 2, hidden).list()).map((s) => s.sessionId)).toEqual(['app', 'sem-projeto']);
+  });
+
   it('um provedor que falha fica de fora; todos falhando, a falha sobe', async () => {
     const ok = fakeHistory('claude', ['.claude'], async () => [session(undefined, '.claude', 'c1', 10)]);
     const bad = fakeHistory('codex', ['.codex'], () => Promise.reject(new Error('ilegível')));

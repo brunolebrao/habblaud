@@ -56,6 +56,8 @@ export interface WatcherOptions {
   isAlive?: (pid: number) => boolean;
   /** Desliga o fs.watch (testes). */
   watch?: boolean;
+  /** Pasta escondida do escritório (HABBLAUD_IGNORE_DIRS): a sessão aberta nela nem entra. */
+  hidden?: (cwd: string) => boolean;
 }
 
 /** cwd -> nome da pasta em projects/ (todo caractere não alfanumérico vira "-"). */
@@ -273,10 +275,12 @@ export class ClaudeWatcher implements AgentSource {
         this.watchDir(join(acc.dir, 'sessions'));
       }
       const res = reader.poll();
-      const info: SourceInfo = { label: acc.id, path: acc.detected.configDir, sessions: res.entries.length, ok: res.ok };
+      const hidden = this.opts.hidden;
+      const entries = hidden ? res.entries.filter((e) => !hidden(e.cwd)) : res.entries;
+      const info: SourceInfo = { label: acc.id, path: acc.detected.configDir, sessions: entries.length, ok: res.ok };
       if (res.error) info.error = res.error;
       this.sourceInfo.set(acc.dir, info);
-      for (const entry of res.entries) {
+      for (const entry of entries) {
         const key = `${acc.id}:${entry.pid}`;
         seen.add(key);
         try {

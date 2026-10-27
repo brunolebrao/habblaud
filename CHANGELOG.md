@@ -10,6 +10,12 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **Esconder pastas do escritório (`HABBLAUD_IGNORE_DIRS`).** Pastas separadas por vírgula, como `~/.claude-mem`
+  (onde o claude-mem roda as próprias sessões do Claude Code): as sessões nelas ou nas subpastas não viram sala nem
+  personagem e ficam fora do histórico de sessões, das Entregas e das pastas do Novo agente. No Docker, vale no `.env`.
+
 ## [1.0.3] - 2026-10-16
 
 ### Corrigido

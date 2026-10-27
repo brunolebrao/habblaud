@@ -102,6 +102,8 @@ export interface CodexSourceOptions {
   tailBytes?: number;
   /** Desliga o fs.watch (testes). */
   watch?: boolean;
+  /** Pasta escondida do escritório (HABBLAUD_IGNORE_DIRS): o thread principal aberto nela não entra. */
+  hidden?: (cwd: string) => boolean;
 }
 
 interface CodexAccount {
@@ -443,6 +445,8 @@ export class CodexSource implements AgentSource, CodexLive {
     const office = this.opts.office;
     if (t.kind === 'main') {
       const cwd = this.cwdOf(t)!;
+      // Fica de fora (e os subagentes dele também: addSub não acha o principal).
+      if (this.opts.hidden?.(cwd)) return;
       office.addMain({
         id: t.key,
         provider: 'codex',
