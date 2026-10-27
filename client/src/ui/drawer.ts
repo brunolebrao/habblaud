@@ -814,6 +814,7 @@ class RoomView {
   private feed: KeyedList<FeedItem>;
   private feedSec: ReturnType<typeof section>;
   private newBtn: HTMLButtonElement;
+  private spawnBtn: HTMLButtonElement;
   private newMsg: HTMLElement;
 
   constructor(
@@ -821,6 +822,14 @@ class RoomView {
     private pty: PtyControl,
   ) {
     this.newBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Nova sessão'), title: tr('Abre um Claude Code novo nesta pasta, num terminal interativo'), on: { click: () => this.newSession() } });
+    this.spawnBtn = h('button', {
+      class: 'ui-btn',
+      type: 'button',
+      text: tr('Novo agente aqui'),
+      title: tr('Começa uma sessão do Claude Code em segundo plano nesta pasta'),
+      attrs: { 'aria-haspopup': 'dialog' },
+      on: { click: () => this.last && ctx.newAgentIn?.(this.last.path, this.spawnBtn) },
+    });
     this.newMsg = h('p', { class: 'ui-actions__msg is-error', role: 'status', hidden: true });
     this.swatch = h('span', { class: 'ui-room-hero__swatch', attrs: { 'aria-hidden': 'true' } });
     this.name = h('h2', { class: 'ui-hero__name' });
@@ -881,7 +890,7 @@ class RoomView {
         h('div', { class: 'ui-hero__text' }, h('div', { class: 'ui-room-hero__title' }, this.name, this.renameBtn), h('span', { class: 'ui-copy-row' }, this.path, copyButton(() => this.last?.path ?? '', tr('Copiar caminho')))),
       ),
       this.gone,
-      h('div', { class: 'ui-status' }, accsEl, h('span', { class: 'ui-status__actions' }, this.newBtn, centerBtn)),
+      h('div', { class: 'ui-status' }, accsEl, h('span', { class: 'ui-status__actions' }, this.spawnBtn, this.newBtn, centerBtn)),
       this.newMsg,
       this.agentsSec.el,
       this.tasksSec.el,
@@ -931,6 +940,9 @@ class RoomView {
     setHidden(this.gone, !!live);
     setHidden(this.renameBtn, !live || !canRenameRoom(this.ctx, r.id));
     setHidden(this.newBtn, !this.pty.enabled);
+    // Mesma regra do botão Novo agente da barra do topo (topbar.ts).
+    const store = this.ctx.store;
+    setHidden(this.spawnBtn, !live || !this.ctx.newAgentIn || !access().spawn || store.mock || store.replaying);
 
     const snap = this.ctx.store.snapshot;
     const agents = (snap?.agents ?? []).filter((a) => a.roomId === r.id);

@@ -200,10 +200,11 @@ describe('NameStore: personagem de cada sala', () => {
   });
 });
 
-function makeOffice(names = new NameStore(null)) {
+function makeOffice(names = new NameStore(null), fixedRooms?: string[]) {
   let clock = 1_000_000;
   const office = new Office({
     names,
+    fixedRooms,
     version: 't',
     startedAt: clock,
     accounts: (s) => [{ id: 'acc', short: 'C', name: 'Conta C', color: '#f08a3c', configDir: '/x', sessions: s.get('acc') ?? 0, usageStatus: 'disabled' }],
@@ -442,6 +443,30 @@ describe('Office', () => {
     const snap = office.commit().snapshot;
     expect(snap.agents).toEqual([]);
     expect(snap.rooms).toEqual([]);
+  });
+
+  it('sala fixa: já está no prédio ao iniciar (sem aviso), recebe agentes e fica depois que eles saem', () => {
+    const { office, advance, now } = makeOffice(undefined, ['/p/fixa/', '/p/outra']);
+    let r = office.commit();
+    expect(r.snapshot.rooms.map((x) => [x.id, x.name, x.fixed])).toEqual([
+      ['/p/fixa', 'fixa', true],
+      ['/p/outra', 'outra', true],
+    ]);
+    expect(r.notices).toEqual([]);
+    office.addMain({ id: 'acc:1', account: 'acc', sessionId: 's1', cwd: '/p/fixa', role: 'x', startedAt: now(), status: 'working' });
+    office.addMain({ id: 'acc:2', account: 'acc', sessionId: 's2', cwd: '/p/livre', role: 'x', startedAt: now(), status: 'working' });
+    r = office.commit();
+    expect(r.snapshot.agents.find((a) => a.id === 'acc:1')!.roomId).toBe('/p/fixa');
+    // a sala fixa não ganha aviso de "Nova sala"; a livre sim
+    expect(r.notices.filter((n) => n.text.includes('Nova sala')).map((n) => n.text)).toEqual(['🏗️ Nova sala: livre']);
+    office.closeMain('acc:1');
+    office.closeMain('acc:2');
+    advance(OFFLINE_GRACE_MS + 1);
+    office.tick();
+    const snap = office.commit().snapshot;
+    expect(snap.agents).toEqual([]);
+    expect(snap.rooms.map((x) => x.id)).toEqual(['/p/fixa', '/p/outra']);
+    expect(snap.rooms.every((x) => x.fixed)).toBe(true);
   });
 
   it('demo misturado: salas no mesmo alocador, contas próprias e liga/desliga', () => {

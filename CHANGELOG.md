@@ -15,6 +15,9 @@ do meio (0.**3**.0).
 - **Esconder pastas do escritório (`HABBLAUD_IGNORE_DIRS`).** Pastas separadas por vírgula, como `~/.claude-mem`
   (onde o claude-mem roda as próprias sessões do Claude Code): as sessões nelas ou nas subpastas não viram sala nem
   personagem e ficam fora do histórico de sessões, das Entregas e das pastas do Novo agente. No Docker, vale no `.env`.
+- **Salas fixas (`HABBLAUD_FIXED_ROOMS`).** Pastas de projeto, separadas por vírgula, que ficam no prédio mesmo sem
+  sessão aberta, com a luz apagada. Na gaveta da sala, **Novo agente aqui** abre o Novo agente com a pasta já escolhida.
+  Salas fixas vazias não vão para o Habblaud World.
 
 ## [1.0.3] - 2026-10-16
 

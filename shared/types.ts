@@ -205,6 +205,8 @@ export interface RoomInfo {
   /** Semente para cores/decoração determinísticas. */
   seed: number;
   createdAt: number;
+  /** Sala fixa (HABBLAUD_FIXED_ROOMS): fica no prédio mesmo sem ninguém, com a luz apagada. */
+  fixed?: true;
   /** Efeito visual temporário na sala (eventos do GitHub detectados nos transcripts; ver shared/github.ts). */
   effect?: RoomEffect;
 }

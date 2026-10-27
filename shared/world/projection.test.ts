@@ -213,6 +213,16 @@ describe('projeção: regras', () => {
     expect(project(input([room('demo:/x')], [agent('demo:a', 'demo:/x')]), new FakeIds(), NOW).floors).toEqual([]);
   });
 
+  it('sala fixa (HABBLAUD_FIXED_ROOMS) sem ninguém não vira andar; com agente, conta como qualquer sala', () => {
+    const ids = new FakeIds();
+    const rooms = [room('/p/fixa-vazia', { fixed: true }), room('/p/fixa-ocupada', { fixed: true })];
+    const u = project(input(rooms, [agent('m1', '/p/fixa-ocupada', { status: 'working' })]), ids, NOW);
+    expect(u.floors).toHaveLength(1);
+    expect(agentsOf(u)).toHaveLength(1);
+    expect(ids.calls).not.toContain('/p/fixa-vazia');
+    expect(project(input([room('/p/so-fixa', { fixed: true })], []), new FakeIds(), NOW).floors).toEqual([]);
+  });
+
   it('só agentes presentes: done e offline somem, e a sala sem ninguém presente não vira andar', () => {
     const rooms = [room('/p/a'), room('/p/b'), room('/p/vazia')];
     const agents = [

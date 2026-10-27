@@ -484,6 +484,7 @@ em `shared/world/city.ts` (fonte da verdade; o servidor do mundo guarda a cópia
 | `HABBLAUD_CODEX` | ligado | `0` desliga a fonte do Codex |
 | `HABBLAUD_CODEX_DIRS` | — | pastas do Codex separadas por vírgula; substitui a detecção (`CODEX_HOME` e `~/.codex*`) |
 | `HABBLAUD_IGNORE_DIRS` | — | pastas escondidas do escritório, separadas por vírgula (`sources/hidden.ts`): sessões nelas ou em subpastas não entram no escritório (`ClaudeWatcher`, `CodexSource`) nem no histórico (`HistorySet`). No Docker, o `docker:up` repassa já expandida com o `$HOME` do host |
+| `HABBLAUD_FIXED_ROOMS` | — | salas fixas, separadas por vírgula: `Office` cria a sala no boot (sem aviso de "Nova sala"), não a apaga no `tick` quando fica vazia e marca `RoomInfo.fixed`. O World não muda: o pacote só tem salas com agentes (`shared/world/projection.ts`). No Docker, o `docker:up` repassa já expandida com o `$HOME` do host |
 | `HABBLAUD_CODEX_BIN` | `codex` do PATH | binário do Codex para o `codex queue` (modo Node e `npm run codex:bridge`) |
 | `HABBLAUD_MENSAGENS` | ligado (com o terminal) | `0`, `false`, `off` ou `no` desligam só as mensagens pelo escritório |
 | `HABBLAUD_CLAUDE_DIRS` | — | config dirs separados por vírgula; substitui a detecção (`~/.claude*` com `projects/` ou `sessions/` + `CLAUDE_CONFIG_DIR`) |

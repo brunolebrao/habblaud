@@ -45,7 +45,7 @@ import { makeClaudeRunner, MIN_CLAUDE_VERSION, readPackageVersion, updateInstall
 import { tr } from '../shared/i18n';
 import { readEnvValue } from '../server/remote/envfile';
 import { parseWorldConfig } from '../server/config';
-import { parseHiddenDirs } from '../server/sources/hidden';
+import { parseDirList } from '../server/sources/hidden';
 import { ensureServerCert, remoteTargets, remoteTlsBase, tlsPaths } from '../server/remote/tls';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -318,6 +318,7 @@ export function renderOverride(
   remoteTlsDir?: string,
   extraPorts: string[] = [],
   hiddenDirs: string[] = [],
+  fixedRooms: string[] = [],
 ): string {
   const env: Array<[string, string]> = [
     ['HABBLAUD_CLAUDE_DIRS', mounts.map((m) => m.mountDir).join(',')],
@@ -327,6 +328,7 @@ export function renderOverride(
   if (usageDir) env.push(['HABBLAUD_USAGE_DIR', CONTAINER_USAGE_DIR]);
   if (timeZone) env.push(['TZ', timeZone]);
   if (hiddenDirs.length) env.push(['HABBLAUD_IGNORE_DIRS', hiddenDirs.join(',')]);
+  if (fixedRooms.length) env.push(['HABBLAUD_FIXED_ROOMS', fixedRooms.join(',')]);
   const lines = [
     `# Gerado por scripts/docker-up.ts em ${generatedAt.toISOString()} — não edite: é recriado a cada \`npm run docker:up\`.`,
     '# Contém caminhos do host e e-mails das contas: fica fora do git e com permissão 600.',
@@ -450,12 +452,12 @@ export function envFileKeys(text: string): string[] {
 }
 
 /**
- * Pastas escondidas do escritório (HABBLAUD_IGNORE_DIRS; o ambiente vale mais que o .env, como no Compose), expandidas
- * com o $HOME do host: os transcripts guardam os caminhos do host, e no container o `~` seria outro.
+ * Lista de pastas (HABBLAUD_IGNORE_DIRS, HABBLAUD_FIXED_ROOMS; o ambiente vale mais que o .env, como no Compose),
+ * expandida com o $HOME do host: os transcripts guardam os caminhos do host, e no container o `~` seria outro.
  */
-export function hiddenDirsFor(env: NodeJS.ProcessEnv, envFile: string, home: string): string[] {
-  const raw = 'HABBLAUD_IGNORE_DIRS' in env ? env.HABBLAUD_IGNORE_DIRS : readEnvValue(envFile, 'HABBLAUD_IGNORE_DIRS');
-  return parseHiddenDirs(raw, home);
+export function dirListFor(key: 'HABBLAUD_IGNORE_DIRS' | 'HABBLAUD_FIXED_ROOMS', env: NodeJS.ProcessEnv, envFile: string, home: string): string[] {
+  const raw = key in env ? env[key] : readEnvValue(envFile, key);
+  return parseDirList(raw, home);
 }
 
 /** As variáveis do Habblaud World que o docker-compose.yml repassa ao container. */
@@ -724,10 +726,13 @@ async function up(opts: Options, port: number): Promise<void> {
   if (usageDir) say(tr('Uso ao vivo (mod ou tap de statusline): monta {0} em {1}, somente leitura.', [tildify(USAGE_DIR), CONTAINER_USAGE_DIR]));
   const remoteTlsDir = prepareRemoteTls();
   const remotePorts = remoteTlsDir || remoteInsecure() ? remotePortsToPublish() : [];
-  const hiddenDirs = hiddenDirsFor(process.env, readEnvFile(), HOME);
+  const envFile = readEnvFile();
+  const hiddenDirs = dirListFor('HABBLAUD_IGNORE_DIRS', process.env, envFile, HOME);
   if (hiddenDirs.length) say(tr('Pastas escondidas do escritório: {0}.', [hiddenDirs.map((d) => tildify(d)).join(', ')]));
+  const fixedRooms = dirListFor('HABBLAUD_FIXED_ROOMS', process.env, envFile, HOME);
+  if (fixedRooms.length) say(tr('Salas fixas: {0}.', [fixedRooms.map((d) => tildify(d)).join(', ')]));
   const tmp = `${OVERRIDE_FILE}.tmp`;
-  writeFileSync(tmp, renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs), { mode: 0o600 });
+  writeFileSync(tmp, renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms), { mode: 0o600 });
   chmodSync(tmp, 0o600);
   renameSync(tmp, OVERRIDE_FILE);
   say(tr('docker-compose.override.yml gerado.'));

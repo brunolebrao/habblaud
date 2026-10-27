@@ -763,6 +763,7 @@ Todo funciona sin configurar nada. Si necesitas ajustar algo, usa variables de e
 | `HABBLAUD_CODEX` | activado | `0` desactiva Codex en la oficina. |
 | `HABBLAUD_CODEX_DIRS` | detección automática | Carpetas de Codex, separadas por comas (en lugar de `~/.codex*` y `CODEX_HOME`). |
 | `HABBLAUD_IGNORE_DIRS` | — | Carpetas ocultas en la oficina, separadas por comas (p. ej. `~/.claude-mem`, donde claude-mem ejecuta sus propias sesiones de Claude Code). Las sesiones en ellas o en sus subcarpetas no se convierten en sala ni en personaje y quedan fuera del historial de sesiones, de las Entregas y de las carpetas de Nuevo agente. |
+| `HABBLAUD_FIXED_ROOMS` | — | Salas fijas: carpetas de proyecto, separadas por comas (p. ej. `~/workspace/projects/app`), que quedan en el edificio aunque no haya sesión abierta (con la luz apagada). El botón **Nuevo agente aquí**, en el cajón de la sala, inicia un agente en ella. Vacías, nunca van a Habblaud World. |
 | `HABBLAUD_CODEX_BIN` | `codex` del PATH (en Windows, `codex.exe`) | El binario de Codex que entrega los mensajes (`codex queue`), en modo Node o en `npm run codex:bridge`. |
 | `HABBLAUD_UPDATE_CHECK` | activada | `0` desactiva la comprobación de versión nueva (una consulta a las releases del repositorio en GitHub cada 6 h). |
 | `HABBLAUD_LANG` | idioma del sistema (salvo inglés); si no, `pt-BR` | Idioma de los textos que arma el servidor (actividades, avisos, logs): `pt-BR`, `en`, `es` o `fr`. La interfaz sigue al navegador o la elección en Configuración › Idioma. Consulta [Idiomas](#idiomas). |
@@ -771,7 +772,7 @@ Todo funciona sin configurar nada. Si necesitas ajustar algo, usa variables de e
 **En Docker**, valen `HABBLAUD_PORT`, `HABBLAUD_BIND`, `HABBLAUD_ALLOWED_HOSTS`, `HABBLAUD_DEMO`, `HABBLAUD_TERMINAL`,
 `HABBLAUD_MENSAGENS`, `HABBLAUD_CODEX`, `HABBLAUD_UPDATE_CHECK`, `HABBLAUD_LANG`, `HABBLAUD_PTY`, las `HABBLAUD_WORLD*` y las
 `HABBLAUD_REMOTE_*` (en el `.env` o en el entorno) y `HABBLAUD_CLAUDE_DIRS`, `HABBLAUD_CODEX_DIRS`, `HABBLAUD_USAGE_DIR` y
-`HABBLAUD_ACCOUNTS` (leídas por `docker:up` en el host), además de `HABBLAUD_IGNORE_DIRS` (en el `.env` o en el entorno, expandida por `docker:up` con el `$HOME` del host); las demás quedan fijas dentro del contenedor. Opciones: `npm run docker:up -- --no-build` (inicia sin reconstruir),
+`HABBLAUD_ACCOUNTS` (leídas por `docker:up` en el host), además de `HABBLAUD_IGNORE_DIRS` y `HABBLAUD_FIXED_ROOMS` (en el `.env` o en el entorno, expandida por `docker:up` con el `$HOME` del host); las demás quedan fijas dentro del contenedor. Opciones: `npm run docker:up -- --no-build` (inicia sin reconstruir),
 `npm run docker:down` (detiene) y `npm run docker:logs` (sigue los logs).
 
 ## Habblaud World

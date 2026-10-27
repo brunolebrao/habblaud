@@ -71,6 +71,8 @@ export interface UiContext {
   toggleWorld(): void;
   /** Abre o campo de renomear a sala perto do ponto (px da janela); botão direito na sala (ui/roomrename.ts). */
   renameRoom?(roomId: string, at: { x: number; y: number }): void;
+  /** Abre o Novo agente (ui/spawn.ts) já com a pasta `folder`, perto de `anchor`: o botão "Novo agente aqui" da sala. */
+  newAgentIn?(folder: string, anchor: HTMLElement): void;
   /**
    * (Opcional) "Ver como os outros veem": abre a cidade do Habblaud World e entra no próprio prédio (a cena Visita). Só
    * existe com a cena Mundo montada (app.ts).

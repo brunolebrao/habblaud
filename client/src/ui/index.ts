@@ -278,6 +278,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   // Botão direito numa sala (lista lateral ou escritório): renomear.
   const renamer = new RoomRenamer(ctx);
   ctx.renameRoom = (id, at) => renamer.open(id, at);
+  ctx.newAgentIn = (folder, anchor) => topbar.openSpawn(anchor, folder);
   world.onRoomContextMenu?.((id, at) => renamer.open(id, at));
   const empty = new EmptyState(ctx);
   const banner = new ConnectionBanner(ctx);

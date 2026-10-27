@@ -56,6 +56,8 @@ export interface OfficeDeps {
   names: NameStore;
   /** Nome escolhido pelo usuário para a sala da pasta (model/room-aliases.ts), se houver. */
   roomAlias?: (path: string) => string | undefined;
+  /** Salas fixas (HABBLAUD_FIXED_ROOMS): pastas que ficam no prédio mesmo sem nenhum agente. */
+  fixedRooms?: readonly string[];
   version: string;
   /** Build do cliente servido (ver OfficeSnapshot.meta.build); ausente no modo dev e nos testes. */
   build?: () => string | undefined;
@@ -199,6 +201,8 @@ export class Office {
   private rooms = new Map<string, { path: string; createdAt: number }>();
   private slots = new SlotAllocator(SLOT_COOLDOWN_MS);
   private roomNames = new Map<string, string>();
+  /** Ids das salas fixas: nunca saem do prédio. */
+  private readonly fixed = new Set<string>();
   private feed: FeedItem[] = [];
   private pendingFeed: FeedItem[] = [];
   private pendingNotices: Notice[] = [];
@@ -220,6 +224,14 @@ export class Office {
 
   constructor(private readonly deps: OfficeDeps) {
     this.now = deps.now ?? Date.now;
+    // Salas fixas já estão no prédio ao iniciar, sem o aviso de "Nova sala".
+    const now = this.now();
+    for (const path of deps.fixedRooms ?? []) {
+      const id = normalizeCwd(path);
+      this.fixed.add(id);
+      this.rooms.set(id, { path: id, createdAt: now });
+    }
+    if (this.fixed.size) this.recomputeRoomNames();
   }
 
   /** Avisado (síncrono) sempre que algo muda; o hub decide quando fazer commit(). */
@@ -930,7 +942,7 @@ export class Office {
     if (this.effects.prune(now)) this.markDirty();
     if (removed) {
       const occupied = new Set([...this.agents.values()].map((r) => r.info.roomId));
-      for (const id of [...this.rooms.keys()]) if (!occupied.has(id)) this.rooms.delete(id);
+      for (const id of [...this.rooms.keys()]) if (!occupied.has(id) && !this.fixed.has(id)) this.rooms.delete(id);
       this.recomputeRoomNames();
       this.markDirty();
     }
@@ -964,6 +976,7 @@ export class Office {
         slot: this.slots.slotOf(id) ?? 0,
         seed: hash32(id),
         createdAt: r.createdAt,
+        ...(this.fixed.has(id) ? { fixed: true as const } : {}),
       }))
       .sort((a, b) => a.slot - b.slot);
     // festa/alarme (eventos do GitHub): das salas reais ou do demo

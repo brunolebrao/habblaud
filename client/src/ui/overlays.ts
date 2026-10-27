@@ -64,8 +64,9 @@ export function officeIsEmpty(ctx: UiContext): boolean {
   const { store } = ctx;
   const snap = store.snapshot;
   const connected = store.connection === 'open' || store.connection === 'mock';
-  // No timelapse, um momento sem ninguém não é "abra o Claude Code (ou o Codex)".
-  return connected && !store.replaying && !!snap && snap.agents.length === 0 && snap.rooms.length === 0;
+  // No timelapse, um momento sem ninguém não é "abra o Claude Code (ou o Codex)". Salas fixas (HABBLAUD_FIXED_ROOMS)
+  // ficam no prédio mesmo vazias: sozinhas, o escritório continua vazio.
+  return connected && !store.replaying && !!snap && snap.agents.length === 0 && snap.rooms.every((r) => r.fixed);
 }
 
 export class EmptyState implements UiComponent {

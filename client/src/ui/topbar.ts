@@ -51,6 +51,11 @@ export class TopBar implements UiComponent {
   readonly worldBtn: HTMLButtonElement;
   private readonly spawnBtn: HTMLButtonElement;
   private readonly spawnPanel: SpawnPanel;
+
+  /** Novo agente com a pasta já escolhida, aberto perto de `anchor` (gaveta da sala; ver UiContext.newAgentIn). */
+  openSpawn(anchor: HTMLElement, folder: string): void {
+    this.spawnPanel.open(anchor, folder);
+  }
   /** Grupo dos botões de painéis (feed, Habblaud World, configurações, ajuda); o histórico entra aqui (ui/index.ts). */
   readonly panelGroup: HTMLElement;
 

@@ -1718,6 +1718,8 @@ export const ES: Readonly<Record<string, string>> = {
   "   Codex: {0}.": "   Codex: {0}.",
   "   Pastas escondidas do escritório: {0}.": "   Carpetas ocultas en la oficina: {0}.",
   "Pastas escondidas do escritório: {0}.": "Carpetas ocultas en la oficina: {0}.",
+  "   Salas fixas: {0}.": "   Salas fijas: {0}.",
+  "Salas fixas: {0}.": "Salas fijas: {0}.",
   "nenhuma pasta do Codex encontrada (defina HABBLAUD_CODEX_DIRS)": "no se encontró ninguna carpeta de Codex (define HABBLAUD_CODEX_DIRS)",
   "desligado (HABBLAUD_CODEX=0)": "desactivado (HABBLAUD_CODEX=0)",
   "   Modo demonstração ligado (agentes simulados misturados aos reais).": "   Modo demostración activado (agentes simulados mezclados con los reales).",
@@ -2254,6 +2256,8 @@ export const ES: Readonly<Record<string, string>> = {
 
   // client/src/ui/drawer.ts e daystats.ts (textos do terminal interativo e do Meu dia)
   "Nova sessão": "Nueva sesión",
+  "Novo agente aqui": "Nuevo agente aquí",
+  "Começa uma sessão do Claude Code em segundo plano nesta pasta": "Inicia una sesión de Claude Code en segundo plano en esta carpeta",
   "Abre um Claude Code novo nesta pasta, num terminal interativo": "Abre un Claude Code nuevo en esta carpeta, en una terminal interactiva",
   "em {0}": "en {0}",
 

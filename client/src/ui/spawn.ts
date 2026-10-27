@@ -233,6 +233,15 @@ export class SpawnPanel {
     if (!matchMedia('(pointer: coarse)').matches) this.prompt.focus();
   }
 
+  /** Abre o painel (ou o reabre perto de `anchor`) já com a pasta `folder` escolhida (ex.: "Novo agente aqui" da sala). */
+  open(anchor: HTMLElement, folder: string): void {
+    if (this.isOpen) this.hide();
+    this.selected = folder;
+    this.typing = false;
+    this.toggle(anchor);
+    this.renderFolders();
+  }
+
   hide(): void {
     this.dictate.cancel();
     if (typeof this.el.hidePopover === 'function' && this.isOpen) this.el.hidePopover();
@@ -286,6 +295,8 @@ export class SpawnPanel {
     );
     if (!this.folders.length) this.showOther(true);
     else if (!known && this.selected && !this.typing) this.showOther(true, this.selected);
+    // A escolhida à vista (ex.: "Novo agente aqui" numa sala que fica no fim da lista).
+    if (this.isOpen) this.folderList.querySelector<HTMLElement>('.is-on')?.scrollIntoView({ block: 'nearest' });
   }
 
   private pick(path: string): void {

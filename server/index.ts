@@ -117,6 +117,7 @@ const accounts = new AccountsService({
 const office = new Office({
   names,
   roomAlias: (path) => roomAliases.get(path),
+  fixedRooms: config.fixedRooms,
   version: config.version,
   // No modo dev o Vite serve o cliente direto do código-fonte: não há build para comparar.
   build: config.dev ? undefined : createBuildReader(config.rootDir),
@@ -495,6 +496,7 @@ server.listen(config.port, config.host, () => {
     log.info(tr('   Codex: {0}.', [config.codex ? tr('nenhuma pasta do Codex encontrada (defina HABBLAUD_CODEX_DIRS)') : tr('desligado (HABBLAUD_CODEX=0)')]));
   }
   if (config.hiddenDirs.length) log.info(tr('   Pastas escondidas do escritório: {0}.', [config.hiddenDirs.join(', ')]));
+  if (config.fixedRooms.length) log.info(tr('   Salas fixas: {0}.', [config.fixedRooms.join(', ')]));
   if (office.isDemo()) log.info(tr('   Modo demonstração ligado (agentes simulados misturados aos reais).'));
   if (config.terminal) log.info(tr('   Terminal: ligado (acesso só local).'));
   else log.info(tr('   Terminal: desligado ({0}).', [terminalOffReason(process.env, config.host, config.inDocker)]));
