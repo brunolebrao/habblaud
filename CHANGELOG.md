@@ -10,6 +10,8 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+- Pacote de arte "Forja" (opcional, `"art": "forja"` no brand.json): oficinas medievais com bancadas e impressoras 3D, cadeiras de madeira, prateleiras de filamento, tochas, barris, piso de tábuas e pedra, paredes de reboco e pedra e interface em madeira e cobre. Só local: a Visita e o Habblaud World continuam com a arte original.
+
 ### Adicionado
 
 - **Esconder pastas do escritório (`HABBLAUD_IGNORE_DIRS`).** Pastas separadas por vírgula, como `~/.claude-mem`

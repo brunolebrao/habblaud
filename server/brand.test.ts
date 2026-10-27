@@ -30,6 +30,13 @@ describe('marca própria (brand.json)', () => {
     expect(bad.warnings).toHaveLength(3);
   });
 
+  it('pacote de arte: só os conhecidos', () => {
+    expect(parseBrand({ name: 'Lebre HQ', art: 'forja' }).brand).toEqual({ name: 'Lebre HQ', art: 'forja' });
+    const bad = parseBrand({ name: 'Lebre HQ', art: 'cyberpunk' });
+    expect(bad.brand).toEqual({ name: 'Lebre HQ' });
+    expect(bad.warnings).toHaveLength(1);
+  });
+
   it('nome vazio, longo demais ou com caracteres de HTML/JSON: sem marca', () => {
     for (const name of ['', '   ', 'x'.repeat(25), '<b>HQ</b>', 'A & B', 'Aspas "x"', 'barra\\', 42]) {
       expect(parseBrand({ name }).brand).toBeUndefined();

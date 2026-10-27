@@ -26,6 +26,11 @@ export function setBrand(next: BrandInfo | undefined): void {
   if (JSON.stringify(next) === JSON.stringify(current)) return;
   current = next ? { ...next } : undefined;
   applyAccent(current?.accent);
+  // Pacote de arte (brand.json "art"): a interface ganha a paleta dele (styles.css, .ui-root[data-art]).
+  for (const root of document.querySelectorAll<HTMLElement>('.ui-root')) {
+    if (current?.art) root.dataset.art = current.art;
+    else delete root.dataset.art;
+  }
   for (const fn of listeners) fn(current);
 }
 

@@ -394,6 +394,8 @@ export interface BrandInfo {
   sign?: string;
   /** Cor de destaque da interface (#rrggbb). */
   accent?: string;
+  /** Pacote de arte do prédio e da interface (client/src/art/packs): 'forja' = oficinas medievais. Só local. */
+  art?: 'forja';
 }
 
 /**

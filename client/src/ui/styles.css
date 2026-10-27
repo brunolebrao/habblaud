@@ -11182,3 +11182,30 @@ html.is-replay #world {
 .ui-world-chip__visitors[hidden] {
   display: none;
 }
+
+/* ------------------------------------------------------------------ pacote de arte "Forja" (brand.json "art": "forja")
+   Madeira escura, pergaminho e cobre no lugar dos painéis azulados; cantos quase retos, como no pixel art. */
+
+.ui-root[data-art='forja'] {
+  --ui-bg: rgba(38, 26, 18, 0.9);
+  --ui-bg-solid: rgba(42, 29, 20, 0.98);
+  --ui-bg-soft: rgba(255, 228, 180, 0.04);
+  --ui-bg-hover: rgba(255, 228, 180, 0.08);
+  --ui-line: rgba(214, 170, 110, 0.2);
+  --ui-line-strong: rgba(214, 170, 110, 0.38);
+  --ui-text: #f1e4c8;
+  --ui-muted: #c7b08c;
+  --ui-faint: #b39c78;
+  --ui-accent: #e8a35a;
+  --ui-accent-soft: rgba(232, 163, 90, 0.14);
+  --radius: 4px;
+  --radius-sm: 3px;
+}
+
+.ui-root[data-art='forja'] .ui-panel {
+  border: 2px solid #5a3b26;
+  box-shadow:
+    0 12px 32px rgba(10, 6, 3, 0.4),
+    inset 0 0 0 1px rgba(232, 163, 90, 0.18),
+    inset 0 1px 0 rgba(255, 228, 180, 0.06);
+}

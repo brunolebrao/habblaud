@@ -2,6 +2,7 @@
 // e implementa o contrato WorldApi consumido pela UI.
 import * as artModule from '../art';
 import { TILE, type ArtModule } from '../art/api';
+import { artWithPack, type ArtPack } from '../art/packs';
 import type { OfficeStore } from '../net/store';
 import { DEFAULT_WORLD_OPTIONS, seasonalThemeFor, type Selection, type SocialEvent, type SoundCue, type WorldApi, type WorldOptions, type WorldPlayback } from './api';
 import { loadBrandAsset, loadWorldAssets, type BrandAsset, type WorldAssets } from './assets';
@@ -22,7 +23,7 @@ import { SoundCues } from './sound-cues';
 export * from './api';
 export type { WorldDebug } from './debug';
 
-const art: ArtModule = artModule;
+const baseArt: ArtModule = artModule;
 
 /** O que a cena Visita usa do mundo dela (createWorld com `visit: true`). */
 export interface VisitWorld {
@@ -52,6 +53,9 @@ export interface CreateWorldOptions {
 
 export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore, o: CreateWorldOptions = {}): WorldApi & { debug: WorldDebug; visit: VisitWorld } {
   let options: WorldOptions = { ...DEFAULT_WORLD_OPTIONS };
+  // Pacote de arte da marca (ver syncArt): o mundo daqui troca de arte; a Visita, sem a marca no snapshot, fica na original.
+  let art: ArtModule = baseArt;
+  let artPack: ArtPack | undefined;
   const visitMode = !!o.visit;
   const camera = new Camera();
   // Simulação e desenho são recriados quando o timelapse entra, pula ou sai (rebuild).
@@ -413,6 +417,17 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore, o: Cr
     lastCols = -1;
     setHover(null);
   };
+
+  const syncArt = (b: BrandInfo | undefined) => {
+    if (b?.art === artPack) return;
+    artPack = b?.art;
+    art = artWithPack(baseArt, artPack);
+    rebuild();
+    onSnapshot();
+  };
+  const offArt = store.on('snapshot', (snap) => syncArt(snap.meta.brand));
+  if (store.snapshot) syncArt(store.snapshot.meta.brand);
+  abort.signal.addEventListener('abort', offArt);
 
   return {
     select: (sel, opts) => setSelection(sel, !!opts?.focus),

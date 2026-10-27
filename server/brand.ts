@@ -13,6 +13,8 @@ const NAME_MAX = 24;
 /** Só o nome de um arquivo de imagem na pasta da marca: nada de caminho. */
 const IMAGE = /^[A-Za-z0-9][\w.@-]{0,63}\.(png|webp|jpe?g|gif)$/i;
 const COLOR = /^#[0-9a-f]{6}$/i;
+/** Pacotes de arte conhecidos (client/src/art/packs). */
+const ART_PACKS = ['forja'] as const;
 
 /** Valida o conteúdo do brand.json; campo inválido fica de fora, nome inválido = sem marca. */
 export function parseBrand(raw: unknown): { brand?: BrandInfo; warnings: string[] } {
@@ -34,6 +36,10 @@ export function parseBrand(raw: unknown): { brand?: BrandInfo; warnings: string[
   if (r.accent !== undefined) {
     if (typeof r.accent === 'string' && COLOR.test(r.accent)) brand.accent = r.accent.toLowerCase();
     else warnings.push(tr('brand.json: "accent" precisa ser uma cor como #7cc8ff'));
+  }
+  if (r.art !== undefined) {
+    if ((ART_PACKS as readonly unknown[]).includes(r.art)) brand.art = r.art as BrandInfo['art'];
+    else warnings.push(tr('brand.json: "art" precisa ser um destes: {0}', [ART_PACKS.join(', ')]));
   }
   return { brand, warnings };
 }
