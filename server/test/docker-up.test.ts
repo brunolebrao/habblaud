@@ -140,6 +140,15 @@ describe('docker-up', () => {
     expect(renderOverride(mounts)).not.toContain('HABBLAUD_BRAND_DIR');
   });
 
+  it('anexos das mensagens: a única montagem com escrita, e o servidor sabe o caminho do host', () => {
+    const mounts = planMounts(['/Users/fulano/.claude'], [acc('.claude')], slash);
+    const yml = renderOverride(mounts, new Date(0), undefined, undefined, [], undefined, [], [], [], undefined, '/Users/fulano/.habblaud/attachments');
+    expect(yml).toContain('HABBLAUD_ATTACHMENTS_DIR: "/attachments"');
+    expect(yml).toContain('HABBLAUD_ATTACHMENTS_HOST_DIR: "/Users/fulano/.habblaud/attachments"');
+    expect(yml).toMatch(/target: "\/attachments"\n\s+read_only: false/);
+    expect(yml.match(/read_only: false/g)).toHaveLength(1);
+  });
+
   it('fuso do host vai para o container como TZ', () => {
     const mounts = planMounts(['/Users/fulano/.claude'], [acc('.claude')], slash);
     expect(renderOverride(mounts, new Date(0), undefined, 'America/Sao_Paulo')).toContain('TZ: "America/Sao_Paulo"');

@@ -10,10 +10,10 @@ import type { UiContext } from './context';
 import { DictationButton, dictationAvailable, insertDictation } from './dictation';
 import { h, iconButton, setHidden, setText } from './dom';
 import { ICONS } from './icons';
+import { fileToBase64, formatBytes, MAX_FILE_BYTES, MAX_FILES } from './attach';
 
 export const SPAWN_PROMPT_MAX = 8_000;
-export const MAX_FILES = 8;
-export const MAX_FILE_BYTES = 15 * 1024 * 1024;
+export { formatBytes, MAX_FILE_BYTES, MAX_FILES } from './attach';
 const POLL_MS = 700;
 /**
  * Quanto a página espera o pedido abrir: mais que o servidor leva para desistir (fila 30 s + `claude --bg` e `open`,
@@ -65,20 +65,6 @@ export function ago(at: number, now = Date.now()): string {
   return `${Math.round(hours / 24)} d`;
 }
 
-export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
-}
-
-function fileToBase64(file: Blob): Promise<string> {
-  return new Promise((ok, fail) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result).replace(/^data:[^,]*,/, ''));
-    r.onerror = () => fail(new Error(tr('não deu para ler o arquivo')));
-    r.readAsDataURL(file);
-  });
-}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;

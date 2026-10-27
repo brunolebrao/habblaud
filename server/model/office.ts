@@ -61,6 +61,8 @@ export interface OfficeDeps {
   fixedRooms?: readonly string[];
   /** Marca própria (server/brand.ts), posta em OfficeSnapshot.meta.brand. */
   brand?: BrandInfo;
+  /** As mensagens aceitam anexos (POST /api/messages/attachments; messages/http.ts). */
+  messageAttachments?: boolean;
   version: string;
   /** Build do cliente servido (ver OfficeSnapshot.meta.build); ausente no modo dev e nos testes. */
   build?: () => string | undefined;
@@ -1021,6 +1023,7 @@ export class Office {
         updates: this.deps.updates?.(),
         ...(this.deps.world ? { world: this.deps.world() } : {}),
         ...(this.deps.brand ? { brand: this.deps.brand } : {}),
+        ...(this.deps.messageAttachments ? { messageAttachments: true } : {}),
       },
     };
   }

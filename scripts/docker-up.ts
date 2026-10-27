@@ -62,6 +62,8 @@ const CONTAINER_USAGE_DIR = '/usage';
 const CONTAINER_REMOTE_TLS_DIR = '/remote-tls';
 /** Marca própria (server/brand.ts): ~/.habblaud/brand do host, somente leitura. */
 const CONTAINER_BRAND_DIR = '/brand';
+/** Anexos das mensagens (server/messages/http.ts): ~/.habblaud/attachments do host, a ÚNICA montagem com escrita. */
+const CONTAINER_ATTACHMENTS_DIR = '/attachments';
 const SERVICE = 'habblaud';
 /** Raiz das montagens dentro do container: /claude/<conta>/{projects,sessions}. */
 const CONTAINER_ROOT = '/claude';
@@ -322,6 +324,7 @@ export function renderOverride(
   hiddenDirs: string[] = [],
   fixedRooms: string[] = [],
   brandDir?: string,
+  attachmentsDir?: string,
 ): string {
   const env: Array<[string, string]> = [
     ['HABBLAUD_CLAUDE_DIRS', mounts.map((m) => m.mountDir).join(',')],
@@ -333,6 +336,7 @@ export function renderOverride(
   if (hiddenDirs.length) env.push(['HABBLAUD_IGNORE_DIRS', hiddenDirs.join(',')]);
   if (fixedRooms.length) env.push(['HABBLAUD_FIXED_ROOMS', fixedRooms.join(',')]);
   if (brandDir) env.push(['HABBLAUD_BRAND_DIR', CONTAINER_BRAND_DIR]);
+  if (attachmentsDir) env.push(['HABBLAUD_ATTACHMENTS_DIR', CONTAINER_ATTACHMENTS_DIR], ['HABBLAUD_ATTACHMENTS_HOST_DIR', attachmentsDir]);
   const lines = [
     `# Gerado por scripts/docker-up.ts em ${generatedAt.toISOString()} — não edite: é recriado a cada \`npm run docker:up\`.`,
     '# Contém caminhos do host e e-mails das contas: fica fora do git e com permissão 600.',
@@ -350,14 +354,15 @@ export function renderOverride(
   // Acesso remoto: SÓ a pasta do certificado do servidor (a chave da CA fica no host).
   if (remoteTlsDir) binds.push({ source: remoteTlsDir, target: CONTAINER_REMOTE_TLS_DIR });
   if (brandDir) binds.push({ source: brandDir, target: CONTAINER_BRAND_DIR });
-  if (binds.length) {
+  const writable = attachmentsDir ? [{ source: attachmentsDir, target: CONTAINER_ATTACHMENTS_DIR }] : [];
+  if (binds.length || writable.length) {
     lines.push('    volumes:');
-    for (const b of binds) {
+    for (const b of [...binds.map((x) => ({ ...x, ro: true })), ...writable.map((x) => ({ ...x, ro: false }))]) {
       lines.push(
         '      - type: bind',
         `        source: ${yamlString(b.source)}`,
         `        target: ${yamlString(b.target)}`,
-        '        read_only: true',
+        `        read_only: ${b.ro}`,
         '        bind:',
         '          create_host_path: false',
       );
@@ -454,6 +459,17 @@ export function envFileKeys(text: string): string[] {
     if (m) keys.push(m[1]);
   }
   return keys;
+}
+
+/** ~/.habblaud/attachments no host (criada com 700; caminho real), ou undefined se não deu para criar. */
+function ensureAttachmentsDir(): string | undefined {
+  const dir = join(HOME, '.habblaud', 'attachments');
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    return realpathSync(dir);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Pasta da marca própria no host (~/.habblaud/brand com brand.json; caminho real), ou undefined. */
@@ -747,11 +763,13 @@ async function up(opts: Options, port: number): Promise<void> {
   const fixedRooms = dirListFor('HABBLAUD_FIXED_ROOMS', process.env, envFile, HOME);
   if (fixedRooms.length) say(tr('Salas fixas: {0}.', [fixedRooms.map((d) => tildify(d)).join(', ')]));
   const brandDir = brandDirFor(HOME);
+  const attachmentsDir = ensureAttachmentsDir();
+  if (attachmentsDir) say(tr('Anexos das mensagens: monta {0} em {1} (gravação só nesta pasta).', [tildify(attachmentsDir), CONTAINER_ATTACHMENTS_DIR]));
   if (brandDir) say(tr('Marca própria: monta {0} em {1}, somente leitura.', [tildify(brandDir), CONTAINER_BRAND_DIR]));
   const tmp = `${OVERRIDE_FILE}.tmp`;
   writeFileSync(
     tmp,
-    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir),
+    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir, attachmentsDir),
     { mode: 0o600 },
   );
   chmodSync(tmp, 0o600);

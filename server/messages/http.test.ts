@@ -15,7 +15,9 @@ import { NameStore } from '../model/names';
 import { Office } from '../model/office';
 import { request } from '../test/permission-server';
 import { tempDir } from '../test/fixtures';
-import { createMessageRoutes } from './http';
+import { readFileSync } from 'node:fs';
+import { AttachmentStore, writeAttachments } from '../spawn/attachments';
+import { createMessageRoutes, type MessageFiles } from './http';
 import { MessageRegistry, type MessageRegistryOptions } from './registry';
 
 setQuiet(true);
@@ -31,7 +33,9 @@ interface MessageServer {
 }
 
 /** Office + Hub + rotas de verdade numa porta livre do 127.0.0.1, com um agente principal na sessão "sess-1". */
-async function serveMessages(opts: { enabled?: boolean; demo?: boolean; registry?: Partial<MessageRegistryOptions> } = {}): Promise<MessageServer> {
+async function serveMessages(
+  opts: { enabled?: boolean; demo?: boolean; registry?: Partial<MessageRegistryOptions>; files?: MessageFiles } = {},
+): Promise<MessageServer> {
   const tmp = tempDir();
   const enabled = opts.enabled ?? true;
   const late: { registry?: MessageRegistry } = {};
@@ -66,7 +70,7 @@ async function serveMessages(opts: { enabled?: boolean; demo?: boolean; registry
     version: 't',
     inDocker: false,
     terminal: true,
-    messages: registry ? createMessageRoutes(registry) : undefined,
+    messages: registry ? createMessageRoutes(registry, opts.files) : undefined,
   });
   const guard = createRequestGuard({ allowedHosts: new Set(['habblaud.lan']) });
   const server = http.createServer((req, res) => {
@@ -237,6 +241,40 @@ describe('rotas', () => {
     expect(done.updatedAt).toBeGreaterThanOrEqual(done.createdAt);
     const agent = (await snapshot(srv)).agents.find((a) => a.id === MAIN)!;
     expect(agent.recent.at(-1)).toMatchObject({ icon: '✉️', text: 'Mensagem pelo Habblaud', detail: 'Agora roda os testes de novo e me diga o que falhou' });
+  });
+
+  it('anexos: sobem um a um, a mensagem leva os caminhos (como a sessão os vê) e cada anexo serve uma vez só', async () => {
+    const dir = tempDir();
+    try {
+      const store = new AttachmentStore();
+      // Como no Docker: grava na pasta montada e devolve o caminho do host.
+      const files: MessageFiles = { store, write: (id, f) => writeAttachments(dir.dir, id, f).map((p) => p.replace(dir.dir, '/Users/eu/.habblaud/attachments')) };
+      srv = await serveMessages({ files });
+      await post(srv, '/api/mod/inbox', { session: SESSION, account: 'acc' });
+      await sleep(30);
+      const up = await post(srv, '/api/messages/attachments', { name: 'print.png', type: 'image/png', data: Buffer.from('png!').toString('base64') });
+      expect(up.status).toBe(201);
+      const { id } = up.json as { id: string };
+      const created = await post(srv, '/api/messages', { agentId: MAIN, text: 'olha o print', attachments: [id] });
+      expect(created.status).toBe(201);
+      const inbox = (await post(srv, '/api/mod/inbox', { session: SESSION, account: 'acc' })).json as { messages: InboxMessage[] };
+      const text = inbox.messages[0]!.text;
+      expect(text).toMatch(/^olha o print\n\nAnexo enviado pelo Habblaud \(leia antes de começar\):\n- \/Users\/eu\/\.habblaud\/attachments\/\d{8}-\d{6}-[\w-]+\/print\.png$/);
+      const real = text.split('- ')[1]!.replace('/Users/eu/.habblaud/attachments', dir.dir);
+      expect(readFileSync(real, 'utf8')).toBe('png!');
+      // Só anexo, sem texto: vale. O mesmo id de novo: já foi usado.
+      expect((await post(srv, '/api/messages', { agentId: MAIN, text: '', attachments: [id] })).status).toBe(400);
+      const up2 = (await post(srv, '/api/messages/attachments', { name: 'a.txt', data: Buffer.from('a').toString('base64') })).json as { id: string };
+      expect((await post(srv, '/api/messages', { agentId: MAIN, text: '', attachments: [up2.id] })).status).toBe(201);
+    } finally {
+      dir.cleanup();
+    }
+  });
+
+  it('anexos desligados (sem pasta para gravar): 403 no envio do arquivo e 400 na mensagem com anexos', async () => {
+    srv = await serveMessages();
+    expect((await post(srv, '/api/messages/attachments', { name: 'a.txt', data: 'YQ==' })).status).toBe(403);
+    expect((await post(srv, '/api/messages', { agentId: MAIN, text: 'oi', attachments: ['x'] })).status).toBe(400);
   });
 
   it('a sessão some (sem rodadas): canMessage volta a falso e a mensagem na fila falha no prazo', async () => {

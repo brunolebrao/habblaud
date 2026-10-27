@@ -3,7 +3,7 @@
 //   npm run dev    -> tsx server/index.ts --dev (Vite em middleware mode, HMR no mesmo servidor)
 //   npm start      -> node dist/server/index.js (serve dist/client)
 import http from 'node:http';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { codexDirsRefused, isDefaultDir } from './accounts/detect';
 import { AccountsService } from './accounts/service';
 import { isTruthy, loadConfig, messagesOffReason, terminalOffReason, worldSocketUrl } from './config';
@@ -31,7 +31,7 @@ import { createPermissionRoutes } from './permissions/http';
 import { PermissionRegistry } from './permissions/registry';
 import { codexAccountOf } from './codex/http';
 import { createCodexQueueRunner, findCodexBin } from './messages/codex';
-import { createMessageRoutes } from './messages/http';
+import { createMessageRoutes, type MessageFiles } from './messages/http';
 import { MessageRegistry } from './messages/registry';
 import type { CodexLive } from './sources/codex/live';
 import { ClaudeWatcher } from './sources/watcher';
@@ -45,7 +45,7 @@ import { getLocale, tr } from '../shared/i18n';
 import type { WorldLocale } from '../shared/world/protocol';
 import { createCliRunner, createOpener, SpawnService } from './spawn/spawn';
 import { runnableClaudeBin } from './claude-bin';
-import { AttachmentStore } from './spawn/attachments';
+import { AttachmentStore, attachmentsRoot, writeAttachments } from './spawn/attachments';
 import { recentFolders } from './spawn/folders';
 import { isDemoId } from '../shared/timeline';
 import { DictationService } from './dictation/dictation';
@@ -122,6 +122,7 @@ const office = new Office({
   roomAlias: (path) => roomAliases.get(path),
   fixedRooms: config.fixedRooms,
   brand: brandLoad.brand,
+  messageAttachments: config.messages && (!config.inDocker || !!process.env.HABBLAUD_ATTACHMENTS_HOST_DIR?.trim()),
   version: config.version,
   // No modo dev o Vite serve o cliente direto do código-fonte: não há build para comparar.
   build: config.dev ? undefined : createBuildReader(config.rootDir),
@@ -263,7 +264,21 @@ const ptyOptIn = isTruthy(ptyFlag);
 // Novo agente pelo escritório (sessão do Claude Code em segundo plano, ou a tela do app do Claude preenchida): a
 // liberação acima mais a trava das mensagens. No Docker, quem roda é o auxiliar do host (npm run codex:bridge).
 const spawnOn = config.messages && ptyOptIn;
-const attachments = spawnOn ? new AttachmentStore() : undefined;
+const attachments = spawnOn || config.messages ? new AttachmentStore() : undefined;
+// Anexos das mensagens: gravados em ~/.habblaud/attachments e a mensagem leva os caminhos. No Docker, só com a pasta do
+// host montada para escrita pelo docker:up (HABBLAUD_ATTACHMENTS_HOST_DIR = o caminho dela no host, o que a sessão vê).
+const attachHostDir = process.env.HABBLAUD_ATTACHMENTS_HOST_DIR?.trim();
+const messageFiles: MessageFiles | undefined =
+  attachments && config.messages && (!config.inDocker || attachHostDir)
+    ? {
+        store: attachments,
+        write: (id, files) => {
+          const root = attachmentsRoot();
+          const paths = writeAttachments(root, id, files);
+          return attachHostDir ? paths.map((p) => join(attachHostDir, relative(root, p))) : paths;
+        },
+      }
+    : undefined;
 const spawnBin = config.inDocker ? undefined : runnableClaudeBin(process.env);
 const spawn = spawnOn
   ? new SpawnService(config.inDocker ? { attachments } : { opener: createOpener(), cli: spawnBin ? createCliRunner(spawnBin) : undefined, attachments })
@@ -365,7 +380,7 @@ const api = createApiHandler({
   sessions: history,
   timeline: createTimelineHandler({ dir: timelineDir, recording: !!timeline }),
   permissions: permissions ? createPermissionRoutes(permissions) : undefined,
-  messages: messages ? createMessageRoutes(messages) : undefined,
+  messages: messages ? createMessageRoutes(messages, messageFiles) : undefined,
   pty: ptys ? createPtyRoutes(ptys) : undefined,
   spawn,
   attachments,

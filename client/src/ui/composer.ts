@@ -25,7 +25,9 @@ import {
 } from './composer-model';
 import type { UiContext } from './context';
 import { DictationButton, dictationAvailable, insertDictation } from './dictation';
-import { h, setAttr, setHidden, setText, setTitle } from './dom';
+import { h, iconButton, setAttr, setHidden, setText, setTitle } from './dom';
+import { AttachTray } from './attach';
+import { ICONS } from './icons';
 import { access } from '../net/access';
 import { tr } from '../../../shared/i18n';
 
@@ -65,6 +67,9 @@ export class MessageComposer {
   /** Rascunho que recebe o ditado em andamento (o agente pode mudar enquanto o Mac transcreve). */
   private dictKey = '';
   private canDictate = false;
+  /** Anexos da próxima mensagem (só do agente da caixa: trocar de agente os tira). */
+  private tray: AttachTray;
+  private attachBtn: HTMLButtonElement;
 
   constructor(
     private ctx: UiContext,
@@ -102,9 +107,36 @@ export class MessageComposer {
     );
     this.dictate.el.classList.add('ui-msg__mic');
     setHidden(this.dictate.el, true);
+    this.tray = new AttachTray(
+      () => {
+        this.syncButton();
+        this.ctx.invalidate();
+      },
+      (text) => this.sayDictation(text, true),
+    );
+    this.attachBtn = iconButton(ICONS.attach, tr('Anexar imagens ou arquivos (ou cole uma imagem com ⌘V)'), () => this.tray.pick(), 'ui-icon-btn--sm ui-msg__attach');
+    setHidden(this.attachBtn, true);
+    // Colar uma imagem (print) na caixa ou soltar arquivos nela: viram anexos.
+    this.box.addEventListener('paste', (e) => {
+      const files = [...(e.clipboardData?.files ?? [])];
+      if (!files.length || this.attachBtn.hidden) return;
+      if (!e.clipboardData?.getData('text')) e.preventDefault();
+      this.tray.add(files);
+    });
     this.row = h('div', { class: `ui-msg__row${term ? ' ui-term__prompt ui-term__prompt--mic' : ''}` });
     if (term) this.row.append(h('span', { class: 'ui-term__caret', text: '>', attrs: { 'aria-hidden': 'true' } }));
-    this.row.append(this.box, this.dictate.el, this.sendBtn);
+    this.row.append(this.box, this.attachBtn, this.tray.input, this.dictate.el, this.sendBtn);
+    this.row.addEventListener('dragover', (e) => {
+      if (this.attachBtn.hidden || !e.dataTransfer?.types.includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    this.row.addEventListener('drop', (e) => {
+      const files = [...(e.dataTransfer?.files ?? [])];
+      if (this.attachBtn.hidden || !files.length) return;
+      e.preventDefault();
+      this.tray.add(files);
+    });
     // Clique na "linha do prompt" (fora do botão) põe o cursor na caixa, como num terminal.
     this.row.addEventListener('mousedown', (e) => {
       if (e.target === this.row && !this.box.disabled) {
@@ -115,7 +147,7 @@ export class MessageComposer {
     this.hint = h('p', { class: 'ui-msg__hint', hidden: true });
     this.status = h('p', { class: 'ui-msg__status', role: 'status', hidden: true, attrs: { 'aria-live': 'polite' } });
     this.tip = term ? null : h('p', { class: 'ui-msg__tip', text: composerTip() });
-    this.el = h('div', { class: `ui-msg ui-msg--${variant}` }, this.hint, this.row, this.dictStatus, this.status, this.tip);
+    this.el = h('div', { class: `ui-msg ui-msg--${variant}` }, this.hint, this.tray.list, this.row, this.dictStatus, this.status, this.tip);
   }
 
   /**
@@ -142,6 +174,7 @@ export class MessageComposer {
       this.shown = shown;
       this.agentId = key;
       this.box.value = ready ? (this.drafts.get(key) ?? '') : '';
+      this.tray.clear();
       this.box.style.height = '';
       if (ready) requestAnimationFrame(() => this.resize());
     }
@@ -153,6 +186,7 @@ export class MessageComposer {
     setTitle(this.box, ready ? '' : mode.text);
     this.row.classList.toggle('is-disabled', !ready);
     setHidden(this.sendBtn, !ready);
+    setHidden(this.attachBtn, !ready || !store.snapshot?.meta.messageAttachments);
     // Consulta em cache (30 s): o Mac pode instalar o Whisper ou parar o auxiliar com a página aberta.
     void dictationAvailable().then((ok) => {
       if (ok === this.canDictate) return;
@@ -228,7 +262,7 @@ export class MessageComposer {
   }
 
   private syncButton(): void {
-    this.sendBtn.disabled = this.mode.kind !== 'ready' || !canSend(this.box.value) || this.states.get(this.agentId)?.phase === 'sending';
+    this.sendBtn.disabled = this.mode.kind !== 'ready' || !(canSend(this.box.value) || this.tray.count > 0) || this.states.get(this.agentId)?.phase === 'sending';
   }
 
   /** Cresce com o texto até o limite do CSS (~6 linhas; depois rola). Escondida, mede quando aparecer. */
@@ -248,14 +282,18 @@ export class MessageComposer {
   private async send(): Promise<void> {
     const agentId = this.agentId;
     const raw = this.box.value;
-    if (this.mode.kind !== 'ready' || !canSend(raw) || this.states.get(agentId)?.phase === 'sending') return;
+    const withFiles = this.tray.count > 0;
+    if (this.mode.kind !== 'ready' || !(canSend(raw) || withFiles) || this.states.get(agentId)?.phase === 'sending') return;
     this.providers.set(agentId, this.provider);
     this.setState(agentId, { phase: 'sending', at: Date.now() });
     let r: { message: OutboxMessage } | { error: string };
     try {
-      r = await this.ctx.store.sendMessage(agentId, messageText(raw));
-    } catch {
-      r = { error: OFFLINE_ERROR };
+      const ids = withFiles ? await this.tray.upload('/api/messages/attachments') : [];
+      r = await this.ctx.store.sendMessage(agentId, canSend(raw) ? messageText(raw) : '', ids);
+      if ('message' in r) this.tray.clear();
+    } catch (err) {
+      // Sem conexão (fetch lança TypeError) ou anexo recusado (o motivo do servidor).
+      r = { error: err instanceof Error && !(err instanceof TypeError) && err.message ? err.message : OFFLINE_ERROR };
     }
     if ('error' in r) {
       // Recusada: o texto continua na caixa para tentar de novo.

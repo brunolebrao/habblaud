@@ -18,6 +18,9 @@ do meio (0.**3**.0).
 - **Salas fixas (`HABBLAUD_FIXED_ROOMS`).** Pastas de projeto, separadas por vírgula, que ficam no prédio mesmo sem
   sessão aberta, com a luz apagada. Na gaveta da sala, **Novo agente aqui** abre o Novo agente com a pasta já escolhida.
   Salas fixas vazias não vão para o Habblaud World.
+- **Anexos nas mensagens.** A caixa de mensagem (gaveta do agente e terminal) ganha o 📎: imagens e arquivos, também
+  colando um print com ⌘V ou soltando o arquivo na caixa. Eles são gravados em `~/.habblaud/attachments` e a mensagem
+  leva os caminhos para o agente ler. No Docker, o `docker:up` monta só essa pasta com escrita.
 - **Marca própria (`HABBLAUD_BRAND_DIR`).** Um `brand.json` com nome, logo, placa e cor troca o nome e o logo do
   Habblaud na barra do topo, na aba, na placa da recepção, no login do celular e no PWA (o Sobre mantém o crédito ao
   Habblaud). No Docker, o `docker:up` monta `~/.habblaud/brand`. Só aparência local: nada vai para o Habblaud World.

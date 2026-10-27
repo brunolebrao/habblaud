@@ -3288,4 +3288,6 @@ export const ES: Readonly<Record<string, string>> = {
   "brand.json não é um JSON válido": "brand.json no es un JSON válido",
   "   Marca própria: {0} ({1}).": "   Marca propia: {0} ({1}).",
   "Marca própria: monta {0} em {1}, somente leitura.": "Marca propia: monta {0} en {1}, solo lectura.",
+  "Anexar imagens ou arquivos (ou cole uma imagem com ⌘V)": "Adjuntar imágenes o archivos (o pega una imagen con ⌘V)",
+  "Anexos das mensagens: monta {0} em {1} (gravação só nesta pasta).": "Adjuntos de los mensajes: monta {0} en {1} (escritura solo en esta carpeta).",
 };

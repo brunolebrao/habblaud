@@ -379,6 +379,8 @@ export interface OfficeSnapshot {
     world?: WorldMeta;
     /** Marca própria (server/brand.ts, brand.json): nome e imagens no lugar de "Habblaud". Ausente = Habblaud. */
     brand?: BrandInfo;
+    /** A caixa de mensagem aceita anexos (gravados no computador; a mensagem leva os caminhos). */
+    messageAttachments?: boolean;
   };
 }
 

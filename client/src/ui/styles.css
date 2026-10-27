@@ -7895,6 +7895,16 @@ html.is-replay #world {
   display: none;
 }
 
+/* Anexos da caixa de mensagem (ui/attach.ts): logo acima da linha de digitar. */
+.ui-msg__files {
+  margin: 0 0 6px;
+}
+
+.ui-msg__attach {
+  align-self: center;
+  flex: none;
+}
+
 .ui-spawn__file {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto auto;
