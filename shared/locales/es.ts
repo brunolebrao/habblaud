@@ -3302,4 +3302,5 @@ export const ES: Readonly<Record<string, string>> = {
   "Modo": "Modo",
   "Padrão do Claude Code": "Predeterminado de Claude Code",
   "Plano (só planeja)": "Plan (solo planifica)",
+  "escolher o modo da sessão exige poder aprovar permissões por aqui": "elegir el modo de la sesión exige poder aprobar permisos desde aquí",
 };

@@ -411,6 +411,19 @@ describe('porta remota', () => {
     expect((await request(t.localBase, '/api/spawn', { method: 'POST', body: { folder: 'relativa', prompt: '' } })).status).toBe(400);
   });
 
+  it('novo agente com modo (Auto, Aceitar edições...): só para quem também pode aprovar permissões', async () => {
+    const s = await start(['spawn']);
+    const cookie = await login(s.remoteBase);
+    const ask = (mode: string) => request(s.remoteBase, '/api/spawn', { method: 'POST', body: { folder: '/Users/voce/projeto', prompt: 'oi', mode }, headers: { Cookie: cookie } });
+    expect((await ask('auto')).status).toBe(403);
+    expect((await ask('acceptEdits')).status).toBe(403);
+    // Manual não pula aprovação nenhuma: segue o fluxo normal (aqui, 409 por falta do auxiliar).
+    expect((await ask('default')).status).toBe(409);
+    const t = await start(['spawn', 'permissions']);
+    const c2 = await login(t.remoteBase);
+    expect((await request(t.remoteBase, '/api/spawn', { method: 'POST', body: { folder: '/Users/voce/projeto', prompt: 'oi', mode: 'auto' }, headers: { Cookie: c2 } })).status).toBe(409);
+  });
+
   it('login com o corpo pela metade não trava o login de mais ninguém', async () => {
     const s = await start();
     const hanging = http.request(new URL('/api/remote/login', s.remoteBase), {

@@ -516,6 +516,11 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       else if (path === '/api/spawn' && method === 'POST') {
         readJson(req)
           .then((body) => {
+            // Modo diferente do padrão (Auto, Aceitar edições...) pula aprovações: só para quem também pode aprová-las.
+            const mode = body && typeof body === 'object' ? (body as { mode?: unknown }).mode : undefined;
+            if (mode !== undefined && mode !== 'default' && !trusted(req, 'permissions')) {
+              return sendJson(res, 403, { error: denied(req, tr('escolher o modo da sessão exige poder aprovar permissões por aqui')) });
+            }
             const r = spawn.submit(body);
             if ('spawn' in r) return sendJson(res, 201, r.spawn);
             sendJson(res, r.error === 'invalid' ? 400 : r.error === 'too-many' ? 429 : 409, { error: r.reason });
