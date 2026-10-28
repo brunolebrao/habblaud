@@ -15,6 +15,7 @@ import { formatClock, formatDuration } from './format';
 import { ICONS } from './icons';
 import { diffLineKind, moreLabel, previewText, showToolInput, splitToolTitle } from './terminal';
 import { tr } from '../../../shared/i18n';
+import { clearScheduledMode, modeLabel, scheduledMode } from './modeswitch';
 
 /** Evento (em ctx.root) que pede para o cartão de um agente aparecer: rolar até ele e receber o foco. */
 /** Modos oferecidos ao aprovar (server/permissions/registry.ts confere; bypassPermissions nunca). */
@@ -245,7 +246,7 @@ export class PermissionCard {
     this.queue = h('p', { class: 'ui-perm__queue', hidden: true });
     this.remote = h('p', { class: 'ui-perm__note', hidden: true, text: tr('Para responder por aqui, abra o Habblaud por http://localhost (ou 127.0.0.1). Por enquanto, responda no terminal.') });
 
-    this.approveBtn = h('button', { class: 'ui-btn ui-perm__btn ui-perm__btn--allow', type: 'button', on: { click: () => this.send({ behavior: 'allow' }) } }, tr('✓ Aprovar'));
+    this.approveBtn = h('button', { class: 'ui-btn ui-perm__btn ui-perm__btn--allow', type: 'button', on: { click: () => this.approve() } }, tr('✓ Aprovar'));
     this.answerBtn = h('button', { class: 'ui-btn ui-perm__btn ui-perm__btn--allow', type: 'button', hidden: true, on: { click: () => this.sendAnswer() } }, tr('✓ Responder'));
     this.askForm = h('form', { class: 'ui-perm-ask', hidden: true, attrs: { 'aria-label': tr('Perguntas do agente') } });
     this.askForm.addEventListener('submit', (e) => {
@@ -397,6 +398,8 @@ export class PermissionCard {
     setHidden(this.remote, this.isLocal());
     const busy = this.isBusy();
     setHidden(this.approveBtn, ask);
+    const next = codex ? undefined : scheduledMode(this.agentId);
+    setText(this.approveBtn, next ? tr('✓ Aprovar e passar para {0}', [modeLabel(next)]) : tr('✓ Aprovar'));
     setHidden(this.answerBtn, !ask);
     for (const b of [this.approveBtn, this.denyBtn, this.terminalBtn]) b.disabled = busy;
     for (const el of this.askForm.querySelectorAll('input')) el.disabled = busy;
@@ -482,6 +485,12 @@ export class PermissionCard {
     else this.denyBtn.focus();
   }
 
+  /** Aprovar; com um modo agendado no painel do agente (ver modeswitch.ts), aprova já passando para ele. */
+  private approve(): void {
+    const mode = scheduledMode(this.agentId);
+    void this.send(mode ? { behavior: 'allow', mode } : { behavior: 'allow' });
+  }
+
   private async send(d: PermissionDecision): Promise<void> {
     const id = this.id;
     if (!id || this.phase === 'sending' || this.phase === 'sent') return;
@@ -502,6 +511,7 @@ export class PermissionCard {
       setText(this.status, error);
     } else {
       this.phase = 'sent';
+      if (d.mode) clearScheduledMode(this.agentId);
       const done = DONE[d.behavior];
       setText(this.status, `${done}.`);
       this.ctx.announce(`${done}: ${this.ctx.agent(this.agentId)?.name ?? tr('agente')}.`);

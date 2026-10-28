@@ -3343,4 +3343,13 @@ export const EN: Readonly<Record<string, string>> = {
   "falta \"ca\" (a CA de lá, em ~/.habblaud/remote-tls/server/ca.crt)": "\"ca\" is missing (the CA from there, in ~/.habblaud/remote-tls/server/ca.crt)",
   "recurso desligado neste computador": "feature turned off on this computer",
   "Copiar o endereço": "Copy the address",
+  "Modo de permissão": "Permission mode",
+  "Trocando o modo no terminal…": "Switching mode in the terminal…",
+  "Modo: {0}.": "Mode: {0}.",
+  "A sessão roda em outro terminal: passa para {0} na próxima aprovação dela aqui.": "The session runs in another terminal: it switches to {0} on its next approval here.",
+  "✓ Aprovar e passar para {0}": "✓ Approve and switch to {0}",
+  "esperado {mode: default, acceptEdits, plan ou auto}": "expected {mode: default, acceptEdits, plan or auto}",
+  "esta sessão não roda no terminal interativo do Habblaud": "this session does not run in Habblaud's interactive terminal",
+  "não deu para ler o modo na tela do terminal": "could not read the mode on the terminal screen",
+  "o modo {0} não apareceu ao trocar (ele está liberado nesta sessão?)": "mode {0} did not show up while cycling (is it enabled in this session?)",
 };

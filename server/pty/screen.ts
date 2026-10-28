@@ -11,6 +11,8 @@ const SCROLLBACK = 5_000;
 
 interface HeadlessTerminal {
   write(data: string, cb?: () => void): void;
+  rows: number;
+  buffer: { active: { baseY: number; getLine(y: number): { translateToString(trim?: boolean): string } | undefined } };
   resize(cols: number, rows: number): void;
   loadAddon(addon: unknown): void;
   dispose(): void;
@@ -37,6 +39,12 @@ export async function loadHeadlessScreen(): Promise<{ create: ScreenFactory | nu
           write: (data, done) => term.write(data, done),
           resize: (c, r) => term.resize(c, r),
           serialize: () => ser.serialize({ scrollback: SCROLLBACK }),
+          text: () => {
+            const b = term.buffer.active;
+            const out: string[] = [];
+            for (let y = 0; y < term.rows; y++) out.push(b.getLine(b.baseY + y)?.translateToString(true) ?? '');
+            return out.join('\n');
+          },
           dispose: () => term.dispose(),
         };
       },

@@ -11367,3 +11367,37 @@ a.ui-link__badge:hover {
   color: var(--ui-faint);
   font-size: 0.9em;
 }
+/* Modo de permissão no painel do agente (modeswitch.ts). */
+.ui-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 8px 0;
+}
+.ui-mode__label {
+  color: var(--ui-faint);
+  font-size: 0.85em;
+}
+.ui-mode__btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ui-mode__btn.is-on {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+.ui-mode__btn.is-next {
+  border-style: dashed;
+  border-color: var(--ui-accent);
+}
+.ui-mode__note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ui-faint);
+  font-size: 0.85em;
+}
+.ui-mode__note:empty {
+  display: none;
+}

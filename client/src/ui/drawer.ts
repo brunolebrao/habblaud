@@ -44,6 +44,7 @@ import { PermissionCard } from './permission';
 import { canRenameRoom } from './roomrename';
 import { accountChipLabel, accountProvider, CODEX_LIVE_HINT, codexApprovalLabel, providerOf } from './provider';
 import { ptyControllable } from './ptyapi';
+import { ModeSwitch } from './modeswitch';
 import { createAgentRow, updateAgentRow } from './rows';
 import { SocialSection } from './social';
 import { TERMINAL_UNAVAILABLE_HINT, type TerminalControl } from './terminal';
@@ -227,6 +228,7 @@ class AgentView {
   private termLabel: HTMLElement;
   /** Por que o terminal não abre: no celular não há hover para ler o title, então o toque mostra o motivo aqui. */
   private termWhy: HTMLElement;
+  private mode: ModeSwitch;
   private termWhyTimer: ReturnType<typeof setTimeout> | null = null;
   private alert: HTMLElement;
   private alertText: HTMLElement;
@@ -329,6 +331,7 @@ class AgentView {
     );
 
     this.termWhy = h('p', { class: 'ui-term-cta__why', hidden: true, attrs: { role: 'status' } });
+    this.mode = new ModeSwitch(ctx);
 
     this.alertText = h('p', { class: 'ui-alert__text' });
     this.alertQuestions = h('div', { class: 'ui-ask', hidden: true });
@@ -422,6 +425,7 @@ class AgentView {
       statusRow,
       this.termBtn,
       this.termWhy,
+      this.mode.el,
       this.alert,
       this.perm.el,
       this.shellBox,
@@ -575,6 +579,7 @@ class AgentView {
     setAttr(this.followBtn, 'aria-pressed', String(following));
     this.followBtn.classList.toggle('is-on', following);
     this.renderTerminalButton(!!live);
+    this.mode.render(a, !!live);
 
     // Alerta.
     const waiting = a.status === 'waiting' && !!live;

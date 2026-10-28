@@ -5,6 +5,7 @@
 //   POST /api/pty/:id/input|resize|close
 //   POST /api/agents/:id/stop          encerra o agente (aqui ou noutro terminal)
 //   POST /api/agents/:id/takeover      assume a sessão: encerra lá e retoma aqui
+//   POST /api/agents/:id/mode          {mode}: troca o modo de permissão (Shift+Tab até o rodapé mostrar o modo)
 // Quem controla um terminal destes executa comandos na máquina: só conexões do próprio computador, com Host
 // local e (quando o navegador manda) Origin da mesma origem. A borda (http/guard.ts) já exige JSON nos POST.
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -12,9 +13,11 @@ import { PtyError, type PtyManager } from '../pty/manager';
 import { HttpError, readJson, sendJson } from './app';
 import { isLoopbackHost } from './guard';
 import { tr } from '../../shared/i18n';
+import type { PermissionModeChoice } from '../../shared/types';
 
-/** /api/agents/:id/(stop|takeover) (ids nunca contêm '/'). */
-const AGENT_ACTION_ROUTE = /^\/api\/agents\/([^/]+)\/(stop|takeover)$/;
+/** /api/agents/:id/(stop|takeover|mode) (ids nunca contêm '/'). */
+const AGENT_ACTION_ROUTE = /^\/api\/agents\/([^/]+)\/(stop|takeover|mode)$/;
+const MODES: readonly PermissionModeChoice[] = ['default', 'acceptEdits', 'plan', 'auto'];
 
 function isLoopbackAddress(addr: string | undefined): boolean {
   if (!addr) return false;
@@ -77,6 +80,11 @@ export function createPtyRoutes(ptys: PtyManager): (req: IncomingMessage, res: S
       if (action[2] === 'stop') {
         await ptys.stop(id);
         return noContent(res);
+      }
+      if (action[2] === 'mode') {
+        const mode = body?.mode as PermissionModeChoice;
+        if (!MODES.includes(mode)) throw new HttpError(400, tr('esperado {mode: default, acceptEdits, plan ou auto}'));
+        return sendJson(res, 200, { mode: await ptys.setMode(id, mode) });
       }
       return sendJson(res, 201, await ptys.takeover(id, { cols: body?.cols, rows: body?.rows }));
     }

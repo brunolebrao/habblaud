@@ -3344,4 +3344,13 @@ export const ES: Readonly<Record<string, string>> = {
   "falta \"ca\" (a CA de lá, em ~/.habblaud/remote-tls/server/ca.crt)": "falta \"ca\" (la CA de allá, en ~/.habblaud/remote-tls/server/ca.crt)",
   "recurso desligado neste computador": "función desactivada en esta computadora",
   "Copiar o endereço": "Copiar la dirección",
+  "Modo de permissão": "Modo de permiso",
+  "Trocando o modo no terminal…": "Cambiando el modo en el terminal…",
+  "Modo: {0}.": "Modo: {0}.",
+  "A sessão roda em outro terminal: passa para {0} na próxima aprovação dela aqui.": "La sesión corre en otro terminal: pasa a {0} en su próxima aprobación aquí.",
+  "✓ Aprovar e passar para {0}": "✓ Aprobar y pasar a {0}",
+  "esperado {mode: default, acceptEdits, plan ou auto}": "se esperaba {mode: default, acceptEdits, plan o auto}",
+  "esta sessão não roda no terminal interativo do Habblaud": "esta sesión no corre en el terminal interactivo de Habblaud",
+  "não deu para ler o modo na tela do terminal": "no se pudo leer el modo en la pantalla del terminal",
+  "o modo {0} não apareceu ao trocar (ele está liberado nesta sessão?)": "el modo {0} no apareció al cambiar (¿está habilitado en esta sesión?)",
 };
