@@ -3445,4 +3445,5 @@ export const ES: Readonly<Record<string, string>> = {
   "Pedir ajuste a {0}": "Pedir ajuste a {0}",
   "Manda o seu comentário a {0}, que escreve outra versão": "Envía tu comentario a {0}, que escribe otra versión",
   "A conversa que fez este pedido não está no escritório": "La conversación que hizo este pedido no está en la oficina",
+  "Anexar imagens de exemplo (ou cole uma com ⌘V)": "Adjuntar imágenes de ejemplo (o pega una con ⌘V)",
 };

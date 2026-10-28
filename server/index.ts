@@ -2,6 +2,7 @@
 // mantém o modelo do escritório e transmite via SSE. Sem dependências de runtime.
 //   npm run dev    -> tsx server/index.ts --dev (Vite em middleware mode, HMR no mesmo servidor)
 //   npm start      -> node dist/server/index.js (serve dist/client)
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { join, relative } from 'node:path';
 import { codexDirsRefused, isDefaultDir } from './accounts/detect';
@@ -47,7 +48,7 @@ import { getLocale, tr } from '../shared/i18n';
 import type { WorldLocale } from '../shared/world/protocol';
 import { createCliRunner, createOpener, SpawnService } from './spawn/spawn';
 import { runnableClaudeBin } from './claude-bin';
-import { AttachmentStore, attachmentsRoot, writeAttachments } from './spawn/attachments';
+import { AttachmentStore, attachmentsRoot, promptWithAttachments, writeAttachments } from './spawn/attachments';
 import { recentFolders } from './spawn/folders';
 import { isDemoId } from '../shared/timeline';
 import { DictationService } from './dictation/dictation';
@@ -300,11 +301,22 @@ const studio = config.studio
       generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir }) : undefined,
       agentName: (session) => office.list().find((a) => a.sessionId === session && !a.id.startsWith(`${session}:`))?.name,
       // "Pedir ajuste": o comentário vai à sessão que escreveu o pedido, pelas mensagens do escritório.
-      notify: (session, text) => {
+      notify: (session, text, ids) => {
         if (!messages) return { error: tr('mensagens pelo escritório desligadas: peça o ajuste direto ao agente') };
         const agent = office.list().find((a) => a.sessionId === session && !a.id.startsWith(`${session}:`));
         if (!agent) return { error: tr('o agente que fez o pedido não está mais no escritório') };
         try {
+          // Imagens de exemplo (POST /api/messages/attachments antes): gravadas e a mensagem leva os caminhos.
+          if (ids?.length) {
+            if (!messageFiles) return { error: tr('anexos desligados') };
+            const taken = messageFiles.store.take(ids);
+            if ('error' in taken) return { error: taken.error };
+            try {
+              text = promptWithAttachments(text, messageFiles.write(randomUUID(), taken));
+            } finally {
+              messageFiles.store.release(taken.reduce((n, f) => n + f.data.length, 0));
+            }
+          }
           const r = messages.send({ agentId: agent.id, text });
           return 'message' in r ? { ok: true } : { error: 'reason' in r && r.reason ? r.reason : tr('não deu para mandar a mensagem ao agente') };
         } catch (err) {

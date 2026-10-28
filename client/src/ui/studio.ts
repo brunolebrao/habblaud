@@ -6,6 +6,7 @@
 // /api/studio/file/<projeto>/<data>/<nome>. Gerar, aprovar, descartar e mexer nos projetos mandam o cabeçalho do painel.
 import { tr } from '../../../shared/i18n';
 import { access } from '../net/access';
+import { AttachTray } from './attach';
 import type { UiComponent, UiContext } from './context';
 import { copyText, h, iconButton, setHidden, setText } from './dom';
 import { relativeTime } from './format';
@@ -429,7 +430,32 @@ export class Studio implements UiComponent {
     // Pedir ajuste: o comentário volta para a conversa do agente, que manda uma nova versão do pedido.
     const note = area({ maxlength: '2000', rows: '2', placeholder: tr('O que ajustar? (ex.: mais fofo, sem a cerca, base mais baixa)'), 'aria-label': tr('Comentário para o agente') });
     const sendNote = h('button', { class: 'ui-btn ui-btn--primary', type: 'button', text: tr('Mandar ajuste') });
-    const noteBox = h('div', { class: 'ui-studio__note' }, note, h('div', { class: 'ui-studio__actions' }, sendNote));
+    // Imagens de exemplo: botão, colar (⌘V) ou soltar na caixa; vão como anexos da mensagem ao agente.
+    const tray = new AttachTray(
+      () => {},
+      (text) => setText(this.status, text),
+    );
+    tray.input.accept = 'image/*';
+    const attach = iconButton(ICONS.attach, tr('Anexar imagens de exemplo (ou cole uma com ⌘V)'), () => tray.pick(), 'ui-icon-btn--sm');
+    note.addEventListener('paste', (e) => {
+      const files = [...(e.clipboardData?.files ?? [])];
+      if (!files.length) return;
+      if (!e.clipboardData?.getData('text')) e.preventDefault();
+      tray.add(files);
+    });
+    note.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types.includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    note.addEventListener('drop', (e) => {
+      const files = [...(e.dataTransfer?.files ?? [])];
+      if (!files.length) return;
+      e.preventDefault();
+      tray.add(files);
+    });
+    const noteBox = h('div', { class: 'ui-studio__note' }, note, tray.list, tray.input, h('div', { class: 'ui-studio__actions' }, sendNote, attach));
+    if (!access().messages) setHidden(attach, true);
     setHidden(noteBox, true);
     const revise = h('button', {
       class: 'ui-btn',
@@ -446,7 +472,11 @@ export class Studio implements UiComponent {
     });
     sendNote.addEventListener('click', () => {
       if (!note.value.trim()) return void setText(this.status, tr('escreva o que ajustar'));
-      void this.act(() => this.post(j.id, 'revise', { note: note.value }), tr('Ajuste mandado: a nova versão aparece aqui quando o agente responder.'));
+      void this.act(async () => {
+        const attachments = tray.count ? await tray.upload('/api/messages/attachments') : [];
+        await this.post(j.id, 'revise', { note: note.value, attachments });
+        tray.clear();
+      }, tr('Ajuste mandado: a nova versão aparece aqui quando o agente responder.'));
     });
     const card = h(
       'div',

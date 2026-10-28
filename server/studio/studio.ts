@@ -91,7 +91,7 @@ export interface StudioServiceOptions {
   now?: () => number;
   newId?: () => string;
   /** Leva um texto à sessão de um agente (mensagens pelo escritório). Ausente = sem "Pedir ajuste". */
-  notify?: (session: string, text: string) => { ok: true } | { error: string };
+  notify?: (session: string, text: string, attachments?: string[]) => { ok: true } | { error: string };
   /** Nome, no escritório, do agente desta sessão (para o painel mostrar a quem o ajuste vai). */
   agentName?: (session: string) => string | undefined;
 }
@@ -311,7 +311,8 @@ export class StudioService {
       '',
       tr('Mande uma nova versão com POST /api/studio (mesmo project e session); este pedido saiu da lista.'),
     ].join('\n');
-    const sent = this.opts.notify(session, text);
+    const ids = Array.isArray(rec(raw).attachments) ? (rec(raw).attachments as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 8) : [];
+    const sent = this.opts.notify(session, text, ids.length ? ids : undefined);
     if ('error' in sent) return sent;
     this.entries.delete(id);
     this.save();

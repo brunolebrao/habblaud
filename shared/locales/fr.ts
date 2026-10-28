@@ -3461,4 +3461,5 @@ export const FR: Readonly<Record<string, string>> = {
   "Pedir ajuste a {0}": "Demander un ajustement à {0}",
   "Manda o seu comentário a {0}, que escreve outra versão": "Envoie votre commentaire à {0}, qui écrit une autre version",
   "A conversa que fez este pedido não está no escritório": "La conversation à l'origine de cette demande n'est pas au bureau",
+  "Anexar imagens de exemplo (ou cole uma com ⌘V)": "Joindre des images d'exemple (ou collez-en une avec ⌘V)",
 };

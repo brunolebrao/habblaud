@@ -164,6 +164,16 @@ describe('StudioService', () => {
     expect(s.jobs().map((j) => j.id)).toEqual(['j2']);
   });
 
+  it('pedir ajuste leva as imagens de exemplo (ids dos anexos) junto', () => {
+    const got: Array<string[] | undefined> = [];
+    const s = svc({ notify: (_s, _t, ids) => (got.push(ids), { ok: true }), agentName: () => 'Simone' });
+    s.submit({ project: 'p', prompt: 'x', session: '00ecdadc-2c4f-4679' });
+    s.submit({ project: 'p', prompt: 'y', session: '00ecdadc-2c4f-4679' });
+    s.revise('j1', { note: 'assim', attachments: ['a1', 7, 'a2'] });
+    s.revise('j2', { note: 'sem' });
+    expect(got).toEqual([['a1', 'a2'], undefined]);
+  });
+
   it('falhou: tentar de novo volta a esperar você', () => {
     const s = svc();
     s.poll();

@@ -3444,4 +3444,5 @@ export const EN: Readonly<Record<string, string>> = {
   "Pedir ajuste a {0}": "Ask {0} for changes",
   "Manda o seu comentário a {0}, que escreve outra versão": "Sends your comment to {0}, who writes another version",
   "A conversa que fez este pedido não está no escritório": "The conversation that made this request isn't in the office",
+  "Anexar imagens de exemplo (ou cole uma com ⌘V)": "Attach example images (or paste one with ⌘V)",
 };
