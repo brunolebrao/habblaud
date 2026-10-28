@@ -487,6 +487,11 @@ export function peersDirFor(home: string): string | undefined {
   const dir = join(home, '.habblaud', 'peers');
   try {
     return statSync(join(dir, 'peers.json')).isFile() ? realpathSync(dir) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Pasta do Estúdio no host (~/estudio, criada se faltar; caminho real) quando HABBLAUD_STUDIO está ligado, ou undefined. */
 export function studioDirFor(env: NodeJS.ProcessEnv, envFile: string, home: string): string | undefined {
   const on = 'HABBLAUD_STUDIO' in env ? env.HABBLAUD_STUDIO : readEnvValue(envFile, 'HABBLAUD_STUDIO');
@@ -801,8 +806,7 @@ async function up(opts: Options, port: number): Promise<void> {
   const tmp = `${OVERRIDE_FILE}.tmp`;
   writeFileSync(
     tmp,
-    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir, attachmentsDir, peersDir),
-    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir, attachmentsDir, studioDir),
+    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir, attachmentsDir, peersDir, studioDir),
     { mode: 0o600 },
   );
   chmodSync(tmp, 0o600);
