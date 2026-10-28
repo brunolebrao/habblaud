@@ -131,12 +131,15 @@ export type CodexRun = ({ ok: true } | { ok: false; error: string }) & { output:
 
 function runCodex(bin: string, args: string[], cwd: string): Promise<CodexRun> {
   return new Promise((ok) => {
-    execFile(bin, args, { cwd, timeout: GENERATE_TIMEOUT_MS, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }, (err, out, stderr) => {
+    const child = execFile(bin, args, { cwd, timeout: GENERATE_TIMEOUT_MS, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }, (err, out, stderr) => {
       const output = `${out ?? ''}\n${stderr ?? ''}`;
       if (!err) return ok({ ok: true, output });
+      if (err.killed) return ok({ ok: false, error: tr('passou de {0} min sem terminar', [GENERATE_TIMEOUT_MS / 60_000]), output });
       const line = (stderr || err.message || '').split('\n').filter((l) => l.trim()).pop() ?? tr('falhou');
       ok({ ok: false, error: line.trim().slice(0, 300), output });
     });
+    // Sem isto o `codex exec` fica esperando mais texto na entrada ("Reading additional input from stdin...") até o prazo.
+    child.stdin?.end();
   });
 }
 

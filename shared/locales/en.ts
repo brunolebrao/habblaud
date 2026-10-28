@@ -3426,4 +3426,5 @@ export const EN: Readonly<Record<string, string>> = {
   "Título da imagem": "Image title",
   "título longo demais (até {0} caracteres)": "title too long (up to {0} characters)",
   "um agente": "an agent",
+  "passou de {0} min sem terminar": "ran past {0} min without finishing",
 };
