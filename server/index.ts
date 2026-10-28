@@ -294,7 +294,7 @@ const spawn = spawnOn
 // Estúdio (opcional): no Docker quem gera é o auxiliar do host; no Node, o servidor, se achar o Codex.
 const studioCodex = config.studio && !config.inDocker ? findCodexBin(process.env) : undefined;
 const studio = config.studio
-  ? new StudioService({ root: config.studioDir, generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir }) : undefined })
+  ? new StudioService({ root: config.studioDir, stateFile: join(config.dataDir, 'studio.json'), generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir }) : undefined })
   : undefined;
 // Ditado: no Docker quem transcreve é o auxiliar do host; no Node, o servidor, se achar o Whisper local.
 const whisper = config.messages && !config.inDocker ? findWhisper() : undefined;

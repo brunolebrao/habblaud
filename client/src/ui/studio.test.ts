@@ -1,20 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { fileUrl, parseStudio, projectsOf } from './studio';
+import { fileUrl, parseStudio, pendingTotal } from './studio';
 
 describe('parseStudio', () => {
-  it('confere a resposta e descarta caminhos estranhos', () => {
+  it('confere a resposta e descarta o que não bate', () => {
     const s = parseStudio({
       available: true,
-      jobs: [{ id: 'j', project: 'p', prompt: 'x', status: 'sent', at: 1 }, { id: 'k', status: 'hack' }],
-      items: [
-        { file: 'lebre-hq/2026-10-28/a.png', project: 'lebre-hq', date: '2026-10-28', prompt: 'lebre', at: 2 },
-        { file: '../x.png' },
-      ],
+      projects: [{ slug: 'funkos', name: 'Funkos', style: 'vinil', count: 3, cover: 'funkos/2026-10-28/a.png', pending: 2 }, { slug: '../x' }],
+      jobs: [{ id: 'j', project: 'funkos', title: 'Mago', prompt: 'x', status: 'pending', requestedBy: 'Simone', at: 1 }, { id: 'k', status: 'hack' }],
+      items: [{ file: 'funkos/2026-10-28/a.png', title: 'Mago', at: 2 }, { file: '../x.png' }],
     });
-    expect(s.available).toBe(true);
-    expect(s.jobs.map((j) => j.id)).toEqual(['j']);
-    expect(s.items.map((i) => i.file)).toEqual(['lebre-hq/2026-10-28/a.png']);
-    expect(projectsOf([...s.items, { ...s.items[0]!, file: 'x/2026-10-27/b.png', project: 'x' }])).toEqual(['lebre-hq', 'x']);
+    expect(s.projects.map((p) => [p.slug, p.pending, p.cover])).toEqual([['funkos', 2, 'funkos/2026-10-28/a.png']]);
+    expect(s.jobs).toMatchObject([{ id: 'j', status: 'pending', title: 'Mago', requestedBy: 'Simone' }]);
+    expect(s.items.map((i) => [i.file, i.title])).toEqual([['funkos/2026-10-28/a.png', 'Mago']]);
+    expect(pendingTotal(s.projects)).toBe(2);
   });
 
   it('endereço da imagem', () => {

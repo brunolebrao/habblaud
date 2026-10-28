@@ -26,7 +26,7 @@ import { createCliRunner, createOpener, folderProblem, launch, parseSpawn, type 
 import { runnableClaudeBin } from '../server/claude-bin';
 import { ATTACHMENT_MAX_BYTES, ATTACHMENTS_PER_SPAWN, attachmentsRoot, promptWithAttachments, safeFileName, writeAttachments, type Attachment } from '../server/spawn/attachments';
 import { createWhisperTranscriber, findWhisper, type Transcriber } from '../server/dictation/whisper';
-import { createCodexImageGenerator, parseStudioRequest, studioRoot, type StudioGenerator } from '../server/studio/generate';
+import { COMPOSED_PROMPT_MAX, createCodexImageGenerator, parseStudioRequest, studioRoot, type StudioGenerator } from '../server/studio/generate';
 import { checkFile, insideKnownFolder, tempRoots } from '../server/deliveries/files';
 import { discoverClaudeDirs } from '../server/accounts/detect';
 import { HOST_WAIT_MS } from '../server/host-wait';
@@ -299,7 +299,7 @@ export async function studioRound(post: Post, generate: StudioGenerator, log: (l
     const r = rec(raw);
     const id = typeof r?.id === 'string' ? r.id : '';
     if (!id) continue;
-    const req = parseStudioRequest(r);
+    const req = parseStudioRequest(r, COMPOSED_PROMPT_MAX);
     if ('error' in req) {
       results.push({ id, ok: false, error: req.error });
       continue;

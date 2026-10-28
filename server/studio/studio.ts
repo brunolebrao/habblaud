@@ -1,15 +1,17 @@
-// Estúdio pelo escritório (opcional, HABBLAUD_STUDIO=1): pedidos de imagem (POST /api/studio {project, prompt}), o
-// andamento (GET /api/studio/jobs/:id) e a galeria de <raiz>/<projeto>/<data>/ (GET /api/studio e /api/studio/file/…).
-// Quem gera é o Codex (studio/generate.ts):
+// Estúdio pelo escritório (opcional, HABBLAUD_STUDIO=1), organizado em projetos (Funkos, D&D, miniaturas…): cada um
+// tem nome, descrição e um guia de estilo somado a todo prompt dele, e a galeria fica em <raiz>/<projeto>/<data>/.
+// Pedidos de agentes (POST /api/studio) ficam ESPERANDO você: só geram depois que você confere (e pode editar) o título
+// e o prompt no painel e aprova. Os do próprio painel geram direto. Quem gera é o Codex (studio/generate.ts):
 // - modo Node: o próprio servidor, se achou o codex;
 // - Docker: o auxiliar do host (scripts/codex-bridge.ts) busca em POST /api/host/studio/poll e devolve o resultado em
 //   POST /api/host/studio/ack. A galeria vem da raiz montada somente leitura no container (/estudio).
+// Projetos e pedidos esperando ficam em <dataDir>/studio.json (sobrevivem a reinícios).
 import { randomUUID } from 'node:crypto';
-import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { extname, join, sep } from 'node:path';
+import { mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, extname, join, sep } from 'node:path';
 import { tr } from '../../shared/i18n';
 import { HostWait, pollWithWait } from '../host-wait';
-import { parseStudioRequest, type StudioGenerator, type StudioRequest } from './generate';
+import { parseStudioRequest, projectSlug, type StudioGenerator, type StudioRequest } from './generate';
 
 export const HOST_PRESENCE_MS = 10_000;
 const QUEUED_TIMEOUT_MS = 60_000;
@@ -17,22 +19,49 @@ const QUEUED_TIMEOUT_MS = 60_000;
 const SENT_TIMEOUT_MS = 11 * 60_000;
 const KEEP_MS = 30 * 60_000;
 const MAX_OPEN = 3;
+const MAX_PENDING = 50;
+const MAX_PROJECTS = 100;
 const ERROR_MAX = 300;
 const GALLERY_MAX = 300;
+const NAME_MAX = 40;
+const DESCRIPTION_MAX = 300;
+const STYLE_MAX = 1_000;
+const BY_MAX = 40;
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 const FILE_MAX_BYTES = 25 * 1024 * 1024;
 const REL_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}$/;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
-export type StudioJobStatus = 'queued' | 'sent' | 'done' | 'failed';
+export type StudioJobStatus = 'pending' | 'queued' | 'sent' | 'done' | 'failed';
 
 export interface StudioJob {
   id: string;
   project: string;
+  title: string;
+  /** O prompt como foi pedido (sem o guia de estilo do projeto). */
   prompt: string;
   status: StudioJobStatus;
   at: number;
+  /** Quem pediu (o agente diz o próprio nome; só para mostrar). Ausente = o painel. */
+  requestedBy?: string;
   file?: string;
   error?: string;
+}
+
+export interface StudioProject {
+  slug: string;
+  name: string;
+  description?: string;
+  /** Guia de estilo: somado a todo prompt do projeto. */
+  style?: string;
+  updatedAt: number;
+}
+
+export interface StudioProjectInfo extends StudioProject {
+  count: number;
+  /** Imagem mais recente (capa do cartão). */
+  cover?: string;
+  pending: number;
 }
 
 export interface StudioItem {
@@ -40,6 +69,7 @@ export interface StudioItem {
   file: string;
   project: string;
   date: string;
+  title?: string;
   prompt?: string;
   model?: string;
   createdAt?: string;
@@ -48,17 +78,18 @@ export interface StudioItem {
 
 export interface StudioServiceOptions {
   root: string;
+  /** Onde guardar projetos e pedidos esperando (studio.json); ausente = só na memória. */
+  stateFile?: string;
   /** Modo Node com o Codex: gera aqui. Ausente: fila para o auxiliar do host. */
   generator?: StudioGenerator;
   now?: () => number;
   newId?: () => string;
 }
 
-export type StudioSubmit = { job: StudioJob } | { error: 'invalid' | 'unavailable' | 'too-many'; reason: string };
+export type StudioSubmit = { job: StudioJob } | { error: 'invalid' | 'unavailable' | 'too-many' | 'unknown'; reason: string };
 
 interface Entry {
   job: StudioJob;
-  req: StudioRequest;
   touched: number;
 }
 
@@ -71,10 +102,15 @@ function readMeta(path: string): Record<string, unknown> {
   }
 }
 
-const str = (v: unknown, max = 4_000): string | undefined => (typeof v === 'string' && v ? v.slice(0, max) : undefined);
+const str = (v: unknown, max = 4_000): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
 
-/** Imagens da raiz, da mais nova para a mais antiga (até GALLERY_MAX). */
-export function listGallery(root: string): StudioItem[] {
+/** O prompt que vai ao Codex: o pedido mais o guia de estilo do projeto. */
+export function composePrompt(prompt: string, style?: string): string {
+  return style ? `${prompt}\n\nGuia de estilo do projeto (siga sempre): ${style}` : prompt;
+}
+
+/** Imagens da raiz (de um projeto, ou de todos), da mais nova para a mais antiga (até GALLERY_MAX). */
+export function listGallery(root: string, only?: string): StudioItem[] {
   const out: StudioItem[] = [];
   const dirs = (p: string) => {
     try {
@@ -83,7 +119,7 @@ export function listGallery(root: string): StudioItem[] {
       return [];
     }
   };
-  for (const project of dirs(root)) {
+  for (const project of only ? [only] : dirs(root)) {
     for (const date of dirs(join(root, project))) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       const dir = join(root, project, date);
@@ -103,7 +139,7 @@ export function listGallery(root: string): StudioItem[] {
           continue;
         }
         const meta = readMeta(join(dir, `${name.slice(0, -ext.length)}.json`));
-        out.push({ file: `${project}/${date}/${name}`, project, date, prompt: str(meta.prompt), model: str(meta.model, 60), createdAt: str(meta.createdAt, 40), at });
+        out.push({ file: `${project}/${date}/${name}`, project, date, title: str(meta.title, 120), prompt: str(meta.prompt), model: str(meta.model, 60), createdAt: str(meta.createdAt, 40), at });
       }
     }
   }
@@ -126,70 +162,140 @@ export function readGalleryFile(root: string, rel: string): { data: Buffer; type
   }
 }
 
+/** Confere um projeto ({name, description, style}; o slug sai do nome quando não vem). */
+export function parseProject(raw: unknown): Omit<StudioProject, 'updatedAt'> | { error: string } {
+  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const name = str(r.name, NAME_MAX + 1);
+  if (!name || name.length > NAME_MAX) return { error: tr('nome do projeto: de 1 a {0} caracteres', [NAME_MAX]) };
+  const slug = typeof r.slug === 'string' && r.slug ? r.slug : projectSlug(name);
+  if (!SLUG_RE.test(slug)) return { error: tr('projeto inválido (letras, números e hífens)') };
+  const description = str(r.description, DESCRIPTION_MAX);
+  const style = str(r.style, STYLE_MAX);
+  return { slug, name, ...(description ? { description } : {}), ...(style ? { style } : {}) };
+}
+
 export class StudioService {
   private readonly entries = new Map<string, Entry>();
+  private readonly projectsBySlug = new Map<string, StudioProject>();
   private readonly host: HostWait;
   private readonly now: () => number;
 
   constructor(private readonly opts: StudioServiceOptions) {
     this.now = opts.now ?? Date.now;
     this.host = new HostWait(HOST_PRESENCE_MS, this.now);
+    this.load();
   }
 
   available(): boolean {
     return !!this.opts.generator || this.host.present();
   }
 
-  gallery(): StudioItem[] {
-    return listGallery(this.opts.root);
+  gallery(project?: string): StudioItem[] {
+    if (project !== undefined && !SLUG_RE.test(project)) return [];
+    return listGallery(this.opts.root, project);
   }
 
   file(rel: string): ReturnType<typeof readGalleryFile> {
     return readGalleryFile(this.opts.root, rel);
   }
 
-  jobs(): StudioJob[] {
-    this.prune();
-    return [...this.entries.values()].map((e) => ({ ...e.job })).sort((a, b) => b.at - a.at);
+  /** Projetos cadastrados e pastas da galeria: com pedido esperando primeiro, depois o mexido mais recentemente. */
+  projects(): StudioProjectInfo[] {
+    const items = listGallery(this.opts.root);
+    const slugs = new Set([...this.projectsBySlug.keys(), ...items.map((i) => i.project)]);
+    const pending = this.jobs().filter((j) => j.status === 'pending');
+    return [...slugs]
+      .map((slug) => {
+        const p = this.projectsBySlug.get(slug) ?? { slug, name: slug, updatedAt: 0 };
+        const mine = items.filter((i) => i.project === slug);
+        return { ...p, count: mine.length, cover: mine[0]?.file, pending: pending.filter((j) => j.project === slug).length, updatedAt: Math.max(p.updatedAt, mine[0]?.at ?? 0) };
+      })
+      .sort((a, b) => b.pending - a.pending || b.updatedAt - a.updatedAt);
   }
 
-  submit(raw: unknown): StudioSubmit {
+  saveProject(raw: unknown): { project: StudioProject } | { error: string } {
+    const p = parseProject(raw);
+    if ('error' in p) return p;
+    if (!this.projectsBySlug.has(p.slug) && this.projectsBySlug.size >= MAX_PROJECTS) return { error: tr('projetos demais') };
+    const project: StudioProject = { ...p, updatedAt: this.now() };
+    this.projectsBySlug.set(p.slug, project);
+    this.save();
+    return { project: { ...project } };
+  }
+
+  jobs(project?: string): StudioJob[] {
+    this.prune();
+    return [...this.entries.values()]
+      .filter((e) => !project || e.job.project === project)
+      .map((e) => ({ ...e.job }))
+      .sort((a, b) => b.at - a.at);
+  }
+
+  /** Pedido novo. `direct` (o painel, com você olhando): gera já. Senão (um agente): fica esperando a sua aprovação. */
+  submit(raw: unknown, opts: { direct?: boolean } = {}): StudioSubmit {
     this.prune();
     const req = parseStudioRequest(raw);
     if ('error' in req) return { error: 'invalid', reason: req.error };
-    if (!this.available()) return { error: 'unavailable', reason: tr('Estúdio indisponível: o Codex não está instalado no computador ou o auxiliar (npm run codex:bridge) parou') };
-    let open = 0;
-    for (const e of this.entries.values()) if (e.job.status === 'queued' || e.job.status === 'sent') open++;
-    if (open >= MAX_OPEN) return { error: 'too-many', reason: tr('imagens demais sendo geradas: aguarde uma terminar') };
-    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, prompt: req.prompt, status: 'queued', at: this.now() };
-    const entry: Entry = { job, req, touched: this.now() };
+    const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    const requestedBy = opts.direct ? undefined : (str(r.requestedBy, BY_MAX) ?? tr('um agente'));
+    if (opts.direct) {
+      const busy = this.busy();
+      if (busy) return busy;
+    } else if (this.jobs().filter((j) => j.status === 'pending').length >= MAX_PENDING) {
+      return { error: 'too-many', reason: tr('pedidos demais esperando no Estúdio: aprove ou descarte alguns') };
+    }
+    if (!this.projectsBySlug.has(req.project)) {
+      if (this.projectsBySlug.size >= MAX_PROJECTS) return { error: 'too-many', reason: tr('projetos demais') };
+      this.projectsBySlug.set(req.project, { slug: req.project, name: req.project, updatedAt: this.now() });
+    }
+    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}) };
+    const entry: Entry = { job, touched: this.now() };
     this.entries.set(job.id, entry);
-    if (this.opts.generator) void this.generateHere(entry, this.opts.generator);
-    else this.host.wake();
+    if (opts.direct) this.start(entry);
+    this.save();
     return { job: { ...job } };
   }
 
-  get(id: string): StudioJob | undefined {
+  /** Você aprovou um pedido esperando (com o título e o prompt, talvez editados): gera. */
+  approve(id: string, raw: unknown): StudioSubmit {
     this.prune();
     const e = this.entries.get(id);
-    return e && { ...e.job };
+    if (!e || e.job.status !== 'pending') return { error: 'unknown', reason: tr('pedido desconhecido (já aprovado ou descartado?)') };
+    const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt });
+    if ('error' in req) return { error: 'invalid', reason: req.error };
+    const busy = this.busy();
+    if (busy) return busy;
+    e.job.title = req.title;
+    e.job.prompt = req.prompt;
+    this.start(e);
+    this.save();
+    return { job: { ...e.job } };
   }
 
-  /** Rodada do auxiliar: marca presença e entrega os pedidos da fila. */
-  poll(): Array<{ id: string; project: string; prompt: string }> {
+  discard(id: string): boolean {
+    const e = this.entries.get(id);
+    if (!e || e.job.status !== 'pending') return false;
+    this.entries.delete(id);
+    this.save();
+    return true;
+  }
+
+  /** Rodada do auxiliar: marca presença e entrega os pedidos aprovados (com o guia de estilo já no prompt). */
+  poll(): Array<StudioRequest & { id: string }> {
     this.host.seen();
     this.prune();
-    const out: Array<{ id: string; project: string; prompt: string }> = [];
+    const out: Array<StudioRequest & { id: string }> = [];
     for (const e of this.entries.values()) {
       if (e.job.status !== 'queued') continue;
       e.job.status = 'sent';
       e.touched = this.now();
-      out.push({ id: e.job.id, project: e.req.project, prompt: e.req.prompt });
+      out.push({ id: e.job.id, ...this.request(e.job) });
     }
     return out;
   }
 
-  pollWait(ms: number, signal?: AbortSignal): Promise<Array<{ id: string; project: string; prompt: string }>> {
+  pollWait(ms: number, signal?: AbortSignal): Promise<Array<StudioRequest & { id: string }>> {
     return pollWithWait(this.host, () => this.poll(), ms, signal);
   }
 
@@ -200,16 +306,38 @@ export class StudioService {
       const x = r && typeof r === 'object' ? (r as Record<string, unknown>) : {};
       const e = typeof x.id === 'string' ? this.entries.get(x.id) : undefined;
       if (!e || e.job.status !== 'sent') continue;
-      if (x.ok === true && typeof x.file === 'string' && REL_RE.test(x.file)) this.finish(e, x.file);
+      if (x.ok === true && typeof x.file === 'string' && REL_RE.test(x.file) && x.file.startsWith(`${e.job.project}/`)) this.finish(e, x.file);
       else this.fail(e, typeof x.error === 'string' && x.error ? x.error : tr('o auxiliar não gerou a imagem'));
     }
+  }
+
+  private busy(): StudioSubmit | undefined {
+    if (!this.available()) return { error: 'unavailable', reason: tr('Estúdio indisponível: o Codex não está instalado no computador ou o auxiliar (npm run codex:bridge) parou') };
+    let open = 0;
+    for (const e of this.entries.values()) if (e.job.status === 'queued' || e.job.status === 'sent') open++;
+    if (open >= MAX_OPEN) return { error: 'too-many', reason: tr('imagens demais sendo geradas: aguarde uma terminar') };
+    return undefined;
+  }
+
+  private request(job: StudioJob): StudioRequest {
+    return { project: job.project, title: job.title, prompt: composePrompt(job.prompt, this.projectsBySlug.get(job.project)?.style) };
+  }
+
+  private start(e: Entry): void {
+    e.job.status = 'queued';
+    e.job.at = this.now();
+    e.touched = this.now();
+    const p = this.projectsBySlug.get(e.job.project);
+    if (p) p.updatedAt = this.now();
+    if (this.opts.generator) void this.generateHere(e, this.opts.generator);
+    else this.host.wake();
   }
 
   private async generateHere(e: Entry, generate: StudioGenerator): Promise<void> {
     e.job.status = 'sent';
     e.touched = this.now();
     try {
-      this.finish(e, (await generate(e.req)).file);
+      this.finish(e, (await generate(this.request(e.job))).file);
     } catch (err) {
       this.fail(e, (err as Error).message || tr('o Codex falhou'));
     }
@@ -234,6 +362,37 @@ export class StudioService {
       if (e.job.status === 'queued' && age > QUEUED_TIMEOUT_MS) this.fail(e, tr('o auxiliar do computador não buscou o pedido'));
       else if (e.job.status === 'sent' && age > SENT_TIMEOUT_MS) this.fail(e, tr('a geração demorou demais'));
       else if ((e.job.status === 'done' || e.job.status === 'failed') && age > KEEP_MS) this.entries.delete(id);
+    }
+  }
+
+  private load(): void {
+    if (!this.opts.stateFile) return;
+    const data = readMeta(this.opts.stateFile);
+    for (const raw of Array.isArray(data.projects) ? data.projects.slice(0, MAX_PROJECTS) : []) {
+      const p = parseProject(raw);
+      if ('error' in p) continue;
+      this.projectsBySlug.set(p.slug, { ...p, updatedAt: Number((raw as Record<string, unknown>).updatedAt) || 0 });
+    }
+    for (const raw of Array.isArray(data.pending) ? data.pending.slice(0, MAX_PENDING) : []) {
+      const x = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+      const req = parseStudioRequest(x);
+      if ('error' in req || typeof x.id !== 'string') continue;
+      const by = str(x.requestedBy, BY_MAX);
+      this.entries.set(x.id, { job: { id: x.id, ...req, status: 'pending', at: Number(x.at) || this.now(), ...(by ? { requestedBy: by } : {}) }, touched: this.now() });
+    }
+  }
+
+  private save(): void {
+    const file = this.opts.stateFile;
+    if (!file) return;
+    const pending = [...this.entries.values()].filter((e) => e.job.status === 'pending').map((e) => e.job);
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      const tmp = `${file}.tmp`;
+      writeFileSync(tmp, `${JSON.stringify({ projects: [...this.projectsBySlug.values()], pending }, null, 2)}\n`, { mode: 0o600 });
+      renameSync(tmp, file);
+    } catch {
+      // Sem gravar: continua na memória até o próximo reinício.
     }
   }
 }

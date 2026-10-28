@@ -11512,3 +11512,127 @@ a.ui-link__badge:hover {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* Estúdio: projetos (início) e pedidos esperando você. */
+.ui-btn-studio {
+  position: relative;
+}
+.ui-studio-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--ui-accent);
+  color: var(--ui-bg-solid);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 700;
+}
+.ui-studio__body {
+  max-height: min(72vh, 720px);
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+.ui-studio__projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  padding: 0 14px 12px;
+}
+.ui-studio__project {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--ui-line);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ui-studio__project:hover {
+  border-color: var(--ui-accent);
+}
+.ui-studio__project--new {
+  align-items: center;
+  justify-content: center;
+  min-height: 150px;
+  border-style: dashed;
+  color: var(--ui-muted);
+}
+.ui-studio__cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ui-bg-solid);
+}
+.ui-studio__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ui-studio__cover-empty {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: var(--ui-faint);
+}
+.ui-studio__project-name {
+  font-weight: 700;
+}
+.ui-studio__project-meta,
+.ui-studio__project-desc,
+.ui-studio__style,
+.ui-studio__hint,
+.ui-studio__pending-who {
+  font-size: 12px;
+  color: var(--ui-faint);
+  margin: 0;
+}
+.ui-studio__pending-chip {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--ui-accent);
+  color: var(--ui-bg-solid);
+}
+.ui-studio__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 14px 6px;
+}
+.ui-studio__info + .ui-btn {
+  margin: 0 14px 10px;
+}
+.ui-studio__h {
+  margin: 12px 14px 6px;
+  font-size: 13px;
+}
+.ui-studio__form .ui-studio__h {
+  margin: 0;
+}
+.ui-studio__pending {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 14px 10px;
+  padding: 10px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 10px;
+}
+.ui-studio__hint {
+  margin: 10px 14px 0;
+}

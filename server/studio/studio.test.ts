@@ -11,14 +11,14 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 describe('pedido', () => {
   it('projeto vira slug; prompt é obrigatório', () => {
     expect(projectSlug('Lebre HQ — Logo!')).toBe('lebre-hq-logo');
-    expect(parseStudioRequest({ project: 'Lebre HQ', prompt: ' uma lebre ' })).toEqual({ project: 'lebre-hq', prompt: 'uma lebre' });
-    expect(parseStudioRequest({ project: '../x', prompt: 'a' })).toEqual({ project: 'x', prompt: 'a' });
+    expect(parseStudioRequest({ project: 'Lebre HQ', title: ' Logo  da lebre ', prompt: ' uma lebre ' })).toEqual({ project: 'lebre-hq', title: 'Logo da lebre', prompt: 'uma lebre' });
+    expect(parseStudioRequest({ project: '../x', prompt: 'a' })).toEqual({ project: 'x', title: 'a', prompt: 'a' });
     expect('error' in parseStudioRequest({ project: '!!!', prompt: 'a' })).toBe(true);
     expect('error' in parseStudioRequest({ project: 'a', prompt: '' })).toBe(true);
   });
 
   it('nome do arquivo: hora e começo do prompt', () => {
-    expect(imageBaseName('Uma lebre de pixel art segurando um martelo grande', '134502')).toBe('134502-uma-lebre-de-pixel-art-segurando');
+    expect(imageBaseName('Uma lebre de pixel art segurando um martelo grande', '134502')).toBe('134502-uma-lebre-de-pixel-art-segurando-um-martelo');
     expect(codexInstruction('x', 'a.png')).toContain('"a.png"');
   });
 });
@@ -41,12 +41,12 @@ describe('createCodexImageGenerator', () => {
         return { ok: true, output: '' };
       },
     });
-    const out = await gen({ project: 'lebre-hq', prompt: 'lebre' });
+    const out = await gen({ project: 'lebre-hq', title: 'lebre', prompt: 'lebre' });
     expect(out.file).toBe('lebre-hq/2026-10-28/134502-lebre.png');
     expect(calls[0]!.slice(0, 7)).toEqual(['exec', '-m', 'gpt-6-luna', '--sandbox', 'danger-full-access', '--skip-git-repo-check', '-C']);
     const meta = JSON.parse(readFileSync(join(root, 'lebre-hq/2026-10-28/134502-lebre.json'), 'utf8'));
     expect(meta).toMatchObject({ project: 'lebre-hq', prompt: 'lebre', model: 'gpt-6-luna', file: '134502-lebre.png' });
-    expect(readFileSync(join(root, 'lebre-hq/2026-10-28/134502-lebre.md'), 'utf8')).toBe('lebre\n');
+    expect(readFileSync(join(root, 'lebre-hq/2026-10-28/134502-lebre.md'), 'utf8')).toBe('# lebre\n\nlebre\n');
   });
 
   const SID = '019a2b3c-4d5e-6f70-8192-a3b4c5d6e7f8';
@@ -65,7 +65,7 @@ describe('createCodexImageGenerator', () => {
         return { ok: true, output: `model: gpt-6-luna\nsession id: ${SID}\n` };
       },
     });
-    const out = await gen({ project: 'p', prompt: 'lebre' });
+    const out = await gen({ project: 'p', title: 'lebre', prompt: 'lebre' });
     expect(readFileSync(join(root, out.file))).toEqual(PNG);
   });
 
@@ -82,12 +82,12 @@ describe('createCodexImageGenerator', () => {
         return { ok: true, output: `session id: ${SID}\n` };
       },
     });
-    await expect(gen({ project: 'p', prompt: 'x' })).rejects.toThrow();
+    await expect(gen({ project: 'p', title: 'x', prompt: 'x' })).rejects.toThrow();
   });
 
   it('sem imagem: erro com o motivo do Codex', async () => {
     const gen = createCodexImageGenerator({ codexBin: '/bin/codex', root: tmp(), codexHome: tmp(), now, run: async () => ({ ok: false, error: 'model not supported', output: '' }) });
-    await expect(gen({ project: 'p', prompt: 'x' })).rejects.toThrow(/model not supported/);
+    await expect(gen({ project: 'p', title: 'x', prompt: 'x' })).rejects.toThrow(/model not supported/);
   });
 });
 
@@ -124,32 +124,63 @@ describe('galeria', () => {
 });
 
 describe('StudioService', () => {
-  it('Docker: fila para o auxiliar, que devolve o arquivo', () => {
-    let t = 1_000;
-    const s = new StudioService({ root: tmp(), now: () => t, newId: () => 'j1' });
-    expect(s.submit({ project: 'p', prompt: 'x' })).toMatchObject({ error: 'unavailable' });
+  const svc = (over: Partial<ConstructorParameters<typeof StudioService>[0]> = {}) => {
+    let n = 0;
+    return new StudioService({ root: tmp(), newId: () => `j${++n}`, ...over });
+  };
+  const job = (s: StudioService, id: string) => s.jobs().find((j) => j.id === id);
+
+  it('pedido de agente fica esperando; só gera depois de aprovado (com o título e o prompt editados)', () => {
+    const s = svc();
+    s.saveProject({ name: 'Funkos', style: 'Funko Pop, cabeça grande' });
+    expect(s.submit({ project: 'funkos', title: 'Mago', prompt: 'um mago', requestedBy: 'Simone' })).toMatchObject({ job: { id: 'j1', status: 'pending', requestedBy: 'Simone' } });
     expect(s.poll()).toEqual([]);
-    expect(s.submit({ project: 'p', prompt: 'x' })).toMatchObject({ job: { id: 'j1', status: 'queued' } });
-    expect(s.poll()).toEqual([{ id: 'j1', project: 'p', prompt: 'x' }]);
-    s.ack({ results: [{ id: 'j1', ok: true, file: 'p/2026-10-28/a.png' }] });
-    expect(s.get('j1')).toMatchObject({ status: 'done', file: 'p/2026-10-28/a.png' });
-    t += 31 * 60_000;
-    expect(s.get('j1')).toBeUndefined();
+    expect(s.approve('j1', { title: 'Mago azul', prompt: 'um mago de capa azul' })).toMatchObject({ job: { status: 'queued', title: 'Mago azul' } });
+    expect(s.poll()).toEqual([{ id: 'j1', project: 'funkos', title: 'Mago azul', prompt: 'um mago de capa azul\n\nGuia de estilo do projeto (siga sempre): Funko Pop, cabeça grande' }]);
+    s.ack({ results: [{ id: 'j1', ok: true, file: 'funkos/2026-10-28/a.png' }] });
+    expect(job(s, 'j1')).toMatchObject({ status: 'done', file: 'funkos/2026-10-28/a.png' });
   });
 
-  it('caminho estranho no ack: falha', () => {
-    const s = new StudioService({ root: tmp(), newId: () => 'j1' });
+  it('do painel: gera direto (com o auxiliar presente)', () => {
+    const s = svc();
+    expect(s.submit({ project: 'p', prompt: 'x' }, { direct: true })).toMatchObject({ error: 'unavailable' });
     s.poll();
-    s.submit({ project: 'p', prompt: 'x' });
-    s.poll();
-    s.ack({ results: [{ id: 'j1', ok: true, file: '../../etc/passwd' }] });
-    expect(s.get('j1')).toMatchObject({ status: 'failed' });
+    expect(s.submit({ project: 'p', prompt: 'x' }, { direct: true })).toMatchObject({ job: { status: 'queued' } });
   });
 
-  it('modo Node: gera aqui', async () => {
-    const s = new StudioService({ root: tmp(), newId: () => 'j1', generator: async () => ({ file: 'p/2026-10-28/a.png' }) });
+  it('descartar some com o pedido; aprovar de novo não vale', () => {
+    const s = svc();
     s.submit({ project: 'p', prompt: 'x' });
+    expect(s.discard('j1')).toBe(true);
+    expect(s.approve('j1', {})).toMatchObject({ error: 'unknown' });
+  });
+
+  it('caminho estranho ou de outro projeto no ack: falha', () => {
+    const s = svc();
+    s.poll();
+    s.submit({ project: 'p', prompt: 'x' }, { direct: true });
+    s.poll();
+    s.ack({ results: [{ id: 'j1', ok: true, file: 'q/2026-10-28/a.png' }] });
+    expect(job(s, 'j1')).toMatchObject({ status: 'failed' });
+  });
+
+  it('projetos e pedidos esperando sobrevivem ao reinício', () => {
+    const stateFile = join(tmp(), 'studio.json');
+    const a = svc({ stateFile });
+    a.saveProject({ name: 'D&D RPG', description: 'personagens', style: 'aquarela' });
+    a.submit({ project: 'd-d-rpg', title: 'Anão', prompt: 'um anão ferreiro' });
+    const b = svc({ stateFile });
+    expect(b.projects()).toMatchObject([{ slug: 'd-d-rpg', name: 'D&D RPG', style: 'aquarela', pending: 1, count: 0 }]);
+    expect(b.jobs()).toMatchObject([{ id: 'j1', status: 'pending', title: 'Anão' }]);
+  });
+
+  it('modo Node: gera aqui, já com o estilo', async () => {
+    const seen: string[] = [];
+    const s = svc({ generator: async (r) => (seen.push(r.prompt), { file: 'p/2026-10-28/a.png' }) });
+    s.saveProject({ name: 'p', style: 'S' });
+    s.submit({ project: 'p', prompt: 'x' }, { direct: true });
     await new Promise((ok) => setTimeout(ok, 0));
-    expect(s.get('j1')).toMatchObject({ status: 'done' });
+    expect(job(s, 'j1')).toMatchObject({ status: 'done' });
+    expect(seen[0]).toContain('S');
   });
 });

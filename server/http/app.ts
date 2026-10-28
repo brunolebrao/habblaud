@@ -19,7 +19,7 @@ import type { SpawnService } from '../spawn/spawn';
 import { ATTACHMENT_BODY_MAX, parseAttachment, type AttachmentStore } from '../spawn/attachments';
 import type { SpawnFolder } from '../spawn/folders';
 import { AUDIO_BODY_MAX, type DictationService } from '../dictation/dictation';
-import type { StudioService } from '../studio/studio';
+import type { StudioService, StudioSubmit } from '../studio/studio';
 import type { DeliveryIndex } from '../deliveries/deliveries';
 import type { FileFetcher } from '../deliveries/fetcher';
 import { HOST_WAIT_MS } from '../host-wait';
@@ -573,22 +573,41 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
     }
     if (path === '/api/studio' || path.startsWith('/api/studio/')) {
       // O Estúdio roda o Codex sem sandbox (studio/generate.ts): só pelo próprio computador, nunca pela porta remota.
+      // Agentes só PEDEM (o pedido fica esperando); gerar direto, aprovar, descartar e mexer nos projetos só pelo painel
+      // (pedido do próprio navegador, mesma origem: Sec-Fetch-Site same-origin).
       const studio = deps.studio;
+      const fromPanel = req.headers['sec-fetch-site'] === 'same-origin' && req.headers['x-habblaud-studio'] === 'panel';
+      const job = /^\/api\/studio\/jobs\/([^/]+)(?:\/(approve|discard))?$/.exec(path);
+      const reply = (r: StudioSubmit, created = false) =>
+        'job' in r ? sendJson(res, created ? 201 : 200, r.job) : sendJson(res, r.error === 'invalid' ? 400 : r.error === 'too-many' ? 429 : r.error === 'unknown' ? 404 : 409, { error: r.reason });
       if (!studio) sendJson(res, 403, { error: tr('Estúdio desligado (HABBLAUD_STUDIO=1)') });
       else if (!trusted(req)) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
-      else if (path === '/api/studio' && isRead) sendJson(res, 200, { available: studio.available(), jobs: studio.jobs(), items: studio.gallery() });
-      else if (path === '/api/studio' && method === 'POST') {
-        readJson(req, 64 * 1024)
-          .then((body) => {
-            const r = studio.submit(body);
-            if ('job' in r) return sendJson(res, 201, r.job);
-            sendJson(res, r.error === 'invalid' ? 400 : r.error === 'too-many' ? 429 : 409, { error: r.reason });
-          })
-          .catch((err) => fail(res, err));
-      } else if (path.startsWith('/api/studio/jobs/') && isRead) {
-        const job = studio.get(decodeURIComponent(path.slice('/api/studio/jobs/'.length)));
-        if (job) sendJson(res, 200, job);
+      else if (path === '/api/studio' && isRead) {
+        const project = url.searchParams.get('project') ?? undefined;
+        sendJson(res, 200, { available: studio.available(), projects: studio.projects(), jobs: studio.jobs(project), items: studio.gallery(project) });
+      } else if (path === '/api/studio' && method === 'POST') {
+        readJson(req, 64 * 1024).then((body) => reply(studio.submit(body, { direct: fromPanel }), true), (err) => fail(res, err));
+      } else if (path === '/api/studio/projects' && isRead) sendJson(res, 200, { projects: studio.projects() });
+      else if (path === '/api/studio/projects' && method === 'POST') {
+        if (!fromPanel) sendJson(res, 403, { error: tr('projetos do Estúdio só pelo painel do escritório') });
+        else
+          readJson(req, 16 * 1024).then((body) => {
+            const r = studio.saveProject(body);
+            if ('project' in r) sendJson(res, 200, r.project);
+            else sendJson(res, 400, { error: r.error });
+          }, (err) => fail(res, err));
+      } else if (job && !job[2] && isRead) {
+        const found = studio.jobs().find((j) => j.id === decodeURIComponent(job[1]!));
+        if (found) sendJson(res, 200, found);
         else sendJson(res, 404, { error: tr('pedido desconhecido') });
+      } else if (job && job[2] && method === 'POST') {
+        const id = decodeURIComponent(job[1]!);
+        if (!fromPanel) sendJson(res, 403, { error: tr('só você aprova ou descarta, pelo painel do Estúdio') });
+        else if (job[2] === 'discard') {
+          req.resume();
+          if (studio.discard(id)) sendJson(res, 200, { ok: true });
+          else sendJson(res, 404, { error: tr('pedido desconhecido (já aprovado ou descartado?)') });
+        } else readJson(req, 64 * 1024).then((body) => reply(studio.approve(id, body)), (err) => fail(res, err));
       } else if (path.startsWith('/api/studio/file/') && isRead) {
         let rel = '';
         try {
@@ -599,7 +618,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
         const r = studio.file(rel);
         if ('data' in r) sendFile(res, r.data, r.type, r.name);
         else sendJson(res, r.status, { error: r.error });
-      } else methodNotAllowed(res, path === '/api/studio' ? 'GET, POST' : 'GET');
+      } else methodNotAllowed(res, path === '/api/studio' || path === '/api/studio/projects' ? 'GET, POST' : job?.[2] ? 'POST' : 'GET');
       return true;
     }
     if (path === '/api/host/studio/poll' || path === '/api/host/studio/ack') {

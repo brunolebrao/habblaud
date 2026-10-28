@@ -16,11 +16,16 @@ import { tr } from '../../shared/i18n';
 export const STUDIO_MODEL_DEFAULT = 'gpt-6-luna';
 export const GENERATE_TIMEOUT_MS = 10 * 60_000;
 export const PROMPT_MAX = 4_000;
+export const TITLE_MAX = 80;
+/** O prompt com o guia de estilo do projeto (studio.ts), como chega ao auxiliar. */
+export const COMPOSED_PROMPT_MAX = PROMPT_MAX + 1_100;
 const PROJECT_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const IMAGE_RE = /\.(png|jpe?g|webp)$/i;
 
 export interface StudioRequest {
   project: string;
+  /** Título curto da imagem (vai no nome do arquivo e na galeria). */
+  title: string;
   prompt: string;
 }
 
@@ -32,26 +37,29 @@ export interface StudioOutput {
 export type StudioGenerator = (req: StudioRequest) => Promise<StudioOutput>;
 
 /** Nome de projeto em minúsculas, com hífens: "Lebre HQ" -> "lebre-hq". */
-export function projectSlug(raw: string): string {
+export function projectSlug(raw: string, max = 40): string {
   return raw
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
+    .slice(0, max)
     .replace(/-+$/, '');
 }
 
-/** Confere o pedido: {project, prompt}. */
-export function parseStudioRequest(raw: unknown): StudioRequest | { error: string } {
+/** Confere o pedido: {project, title, prompt} (sem título, o começo do prompt). */
+export function parseStudioRequest(raw: unknown, maxPrompt = PROMPT_MAX): StudioRequest | { error: string } {
   const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const project = typeof r.project === 'string' ? projectSlug(r.project) : '';
   if (!PROJECT_RE.test(project)) return { error: tr('projeto inválido (letras, números e hífens)') };
   const prompt = typeof r.prompt === 'string' ? r.prompt.trim() : '';
   if (!prompt) return { error: tr('escreva o prompt da imagem') };
-  if (prompt.length > PROMPT_MAX) return { error: tr('prompt longo demais (até {0} caracteres)', [PROMPT_MAX]) };
-  return { project, prompt };
+  if (prompt.length > maxPrompt) return { error: tr('prompt longo demais (até {0} caracteres)', [maxPrompt]) };
+  const rawTitle = typeof r.title === 'string' ? r.title.replace(/\s+/g, ' ').trim() : '';
+  if (rawTitle.length > TITLE_MAX) return { error: tr('título longo demais (até {0} caracteres)', [TITLE_MAX]) };
+  const title = rawTitle || prompt.replace(/\s+/g, ' ').slice(0, 60).trim();
+  return { project, title, prompt };
 }
 
 export function studioRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -64,9 +72,11 @@ export function stamp(d: Date): { date: string; time: string } {
   return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}` };
 }
 
-/** Nome do arquivo: hora + as primeiras palavras do prompt. */
-export function imageBaseName(prompt: string, time: string): string {
-  const words = projectSlug(prompt.split(/\s+/).slice(0, 6).join(' ')).slice(0, 32).replace(/-+$/, '');
+/** Nome do arquivo: hora + o título (ou as primeiras palavras do prompt). */
+export function imageBaseName(title: string, time: string): string {
+  const full = projectSlug(title.split(/\s+/).slice(0, 8).join(' '), 80);
+  // Longo: corta na última palavra inteira que cabe.
+  const words = full.length <= 48 ? full : full.slice(0, full.lastIndexOf('-', 48) > 0 ? full.lastIndexOf('-', 48) : 48);
   return words ? `${time}-${words}` : time;
 }
 
@@ -145,10 +155,10 @@ export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenera
     const { date, time } = stamp(started);
     const dir = join(root, req.project, date);
     mkdirSync(dir, { recursive: true });
-    const base = imageBaseName(req.prompt, time);
+    const base = imageBaseName(req.title, time);
     const name = `${base}.png`;
     const target = join(dir, name);
-    writeFileSync(join(dir, `${base}.md`), `${req.prompt}\n`);
+    writeFileSync(join(dir, `${base}.md`), `# ${req.title}\n\n${req.prompt}\n`);
     const args = ['exec', '-m', model, '--sandbox', 'danger-full-access', '--skip-git-repo-check', '-C', dir, codexInstruction(req.prompt, name)];
     const r = await run(opts.codexBin, args, dir);
     // O Codex às vezes deixa a imagem só na pasta dele: copia a desta sessão (nunca a de outra conversa).
@@ -158,7 +168,7 @@ export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenera
       if (generated) copyFileSync(generated, target);
     }
     if (!existsSync(target)) throw new Error(r.ok ? tr('o Codex terminou sem gerar a imagem') : tr('o Codex falhou: {0}', [r.error]));
-    const meta = { project: req.project, prompt: req.prompt, model, createdAt: started.toISOString(), file: name };
+    const meta = { project: req.project, title: req.title, prompt: req.prompt, model, createdAt: started.toISOString(), file: name };
     writeFileSync(join(dir, `${base}.json`), `${JSON.stringify(meta, null, 2)}\n`);
     return { file: `${req.project}/${date}/${name}` };
   };
