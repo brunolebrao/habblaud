@@ -1,5 +1,6 @@
 // Gaveta de detalhes (direita): agente ou sala selecionados. Agente do Codex: selo "Codex", textos dele (onde
 // responder, o terminal, a aprovação no lugar do modo de permissão, sem custo) e a dica dos hooks do Codex.
+import { appendLinked, linkNode, reviewLabel, shortUrl, splitUrls } from './links';
 import type { Activity, AgentInfo, FeedItem, RoomInfo, ShellJob, TaskItem } from '../../../shared/types';
 import { roomTheme } from '../art';
 import { createAvatarPlaceholder, updateAvatar } from './avatar';
@@ -113,11 +114,19 @@ function createTimelineItem(): HTMLElement {
     h('span', { class: 'ui-tl__icon', attrs: { 'aria-hidden': 'true' } }),
     h('span', { class: 'ui-tl__text' }),
     h('time', { class: 'ui-tl__time' }),
+    h('span', { class: 'ui-tl__link' }),
   );
 }
 
 function updateTimelineItem(li: HTMLElement, a: Activity, now: number, who?: string): void {
-  const [icon, text, time] = li.children as unknown as HTMLElement[];
+  const [icon, text, time, link] = li.children as unknown as HTMLElement[];
+  // Endereço no detalhe (PR aberto, CI, release...): link com copiar ao lado (ui/links.ts).
+  const url = a.detail ? splitUrls(a.detail).find((p) => p.type === 'url') : undefined;
+  const href = url?.type === 'url' ? url.url : '';
+  if (link.dataset.href !== href) {
+    link.dataset.href = href;
+    link.replaceChildren(...(href ? [linkNode(href, reviewLabel(href) ? '' : shortUrl(href))] : []));
+  }
   setText(icon, a.icon);
   setText(text, who ? `${who}: ${a.text}` : a.text);
   setText(time, relativeTime(a.at, now));
@@ -613,7 +622,11 @@ class AgentView {
     this.actText.classList.toggle('is-error', !!act?.error);
     const detail = act?.detail ?? '';
     setHidden(this.actDetails, !detail);
-    setText(this.actDetail, detail);
+    if (this.actDetail.dataset.text !== detail) {
+      this.actDetail.dataset.text = detail;
+      this.actDetail.textContent = '';
+      appendLinked(this.actDetail, detail);
+    }
 
     // Mandar mensagem: só para principais presentes (com o recurso ligado e a página local; sem o plugin, a dica).
     setHidden(this.msgSec.el, this.composer.render(live, this.id) === 'off');

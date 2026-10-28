@@ -3343,4 +3343,5 @@ export const ES: Readonly<Record<string, string>> = {
   "Outros computadores: monta {0} em {1}, somente leitura.": "Otras computadoras: monta {0} en {1}, solo lectura.",
   "falta \"ca\" (a CA de lá, em ~/.habblaud/remote-tls/server/ca.crt)": "falta \"ca\" (la CA de allá, en ~/.habblaud/remote-tls/server/ca.crt)",
   "recurso desligado neste computador": "función desactivada en esta computadora",
+  "Copiar o endereço": "Copiar la dirección",
 };

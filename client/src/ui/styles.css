@@ -11295,3 +11295,75 @@ html.is-replay #world {
     inset 0 0 0 1px rgba(232, 163, 90, 0.18),
     inset 0 1px 0 rgba(255, 228, 180, 0.06);
 }
+
+/* Links nas respostas e saídas dos agentes (ui/links.ts): abre em outra aba, com copiar ao lado; PR/MR com selo. */
+.ui-link {
+  display: inline;
+  overflow-wrap: anywhere;
+}
+
+.ui-link__a {
+  color: var(--ui-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--ui-accent) 45%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.ui-link__a:hover {
+  text-decoration-color: currentColor;
+}
+
+.ui-link__badge {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--ui-accent-soft);
+  border: 1px solid var(--ui-line-strong);
+  color: var(--ui-text);
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.ui-link__badge:hover {
+  border-color: var(--ui-accent);
+}
+
+.ui-link__copy.ui-icon-btn {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  margin-left: 2px;
+  padding: 2px;
+  vertical-align: middle;
+  opacity: 0.55;
+}
+
+.ui-link:hover .ui-link__copy,
+.ui-link__copy:focus-visible {
+  opacity: 1;
+}
+
+.ui-link__copy.is-copied {
+  color: #5fd38d;
+  opacity: 1;
+}
+
+.ui-tl__link:empty {
+  display: none;
+}
+
+.ui-tl__link {
+  grid-column: 2 / -1;
+  font-size: 11px;
+}
+
+.ui-link__host {
+  color: var(--ui-faint);
+  font-size: 0.9em;
+}

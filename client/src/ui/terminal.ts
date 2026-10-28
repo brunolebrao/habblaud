@@ -19,6 +19,7 @@ import type { PtyControl } from './pty';
 import { TermActions } from './termactions';
 import { TermTabs } from './termtabs';
 import { renderMarkdown } from './markdown';
+import { appendLinked } from './links';
 import { roleLabel, shellWaitIn } from './model';
 import { providerOf } from './provider';
 import {
@@ -394,7 +395,8 @@ type Fill = (target: HTMLElement, text: string) => void;
 type Copier = (text: string, what: string) => HTMLElement;
 
 const fillPlain: Fill = (target, text) => {
-  target.textContent = text;
+  target.textContent = '';
+  appendLinked(target, text);
 };
 
 /** Diff: uma linha por elemento, com fundo verde (+) ou vermelho (-), como no Claude Code. */
