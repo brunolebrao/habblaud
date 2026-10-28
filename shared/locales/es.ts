@@ -3353,4 +3353,10 @@ export const ES: Readonly<Record<string, string>> = {
   "esta sessão não roda no terminal interativo do Habblaud": "esta sesión no corre en el terminal interactivo de Habblaud",
   "não deu para ler o modo na tela do terminal": "no se pudo leer el modo en la pantalla del terminal",
   "o modo {0} não apareceu ao trocar (ele está liberado nesta sessão?)": "el modo {0} no apareció al cambiar (¿está habilitado en esta sesión?)",
+  "{0} pergunta: {1}": "{0} pregunta: {1}",
+  "{0} precisa de você: {1}.": "{0} te necesita: {1}.",
+  "{0} terminou.": "{0} terminó.",
+  "Ler em voz alta": "Leer en voz alta",
+  "Opções: {0}.": "Opciones: {0}.",
+  "Quando um agente termina, lê o começo da resposta; quando ele precisa de você, lê a pergunta. Usa a voz do sistema.": "Cuando un agente termina, lee el comienzo de la respuesta; cuando te necesita, lee la pregunta. Usa la voz del sistema.",
 };
