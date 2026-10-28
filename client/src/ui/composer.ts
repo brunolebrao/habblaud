@@ -288,7 +288,9 @@ export class MessageComposer {
     this.setState(agentId, { phase: 'sending', at: Date.now() });
     let r: { message: OutboxMessage } | { error: string };
     try {
-      const ids = withFiles ? await this.tray.upload('/api/messages/attachments') : [];
+      // Agente de outro computador (server/peers/): os anexos vão para lá, junto com a mensagem.
+      const host = this.ctx.store.agent(agentId)?.host;
+      const ids = withFiles ? await this.tray.upload(`/api/messages/attachments${host ? `?host=${encodeURIComponent(host)}` : ''}`) : [];
       r = await this.ctx.store.sendMessage(agentId, canSend(raw) ? messageText(raw) : '', ids);
       if ('message' in r) this.tray.clear();
     } catch (err) {

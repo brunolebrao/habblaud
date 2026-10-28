@@ -12,6 +12,14 @@ do meio (0.**3**.0).
 
 ### Adicionado
 
+- **Andares de outros computadores** (`~/.habblaud/peers/peers.json`): a central acompanha o Habblaud de outros
+  computadores da rede pela porta com login de cada um e mostra cada computador como um andar, com um seletor no topo
+  (quem trabalha e quem espera você em cada andar). Mensagens (com anexos), permissões, Novo agente e o terminal somente
+  leitura dos agentes de lá são encaminhados pela central, com as mesmas travas daqui; o terminal interativo, editar o
+  personagem e renomear a sala continuam só no próprio computador. Os andares de lá entram só no que vai para a página:
+  estatísticas, linha do tempo, o mod e o Habblaud World seguem só com este computador. O `docker:up` monta a pasta
+  somente leitura.
+
 - **Pacote de arte "Forja" (`"art": "forja"` no brand.json).** Opcional: `"art": "forja"` no brand.json): oficinas medievais com bancadas e impressoras 3D, cadeiras de madeira, prateleiras de filamento, tochas, barris, piso de tábuas e pedra, paredes de reboco e pedra e interface em madeira e cobre. Só local: a Visita e o Habblaud World continuam com a arte original.
 - **Esconder pastas do escritório (`HABBLAUD_IGNORE_DIRS`).** Pastas separadas por vírgula, como `~/.claude-mem`
   (onde o claude-mem roda as próprias sessões do Claude Code): as sessões nelas ou nas subpastas não viram sala nem

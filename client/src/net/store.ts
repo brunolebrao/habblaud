@@ -5,7 +5,8 @@
 // Também cuida da reconexão: quando o navegador desiste do stream (EventSource fechado após erro HTTP,
 // ex.: servidor reiniciando atrás de um proxy), tenta de novo com espera crescente.
 import type { AppearanceParts } from '../../../shared/appearance';
-import type { Activity, AgentDetail, AgentInfo, FeedItem, Notice, OfficeSnapshot, OutboxMessage, PermissionDecision, PermissionRequestInfo, RoomInfo } from '../../../shared/types';
+import type { Activity, AgentDetail, AgentInfo, FeedItem, HostInfo, Notice, OfficeSnapshot, OutboxMessage, PermissionDecision, PermissionRequestInfo, RoomInfo } from '../../../shared/types';
+import { floorOf } from '../../../shared/hosts';
 import { DemoSimulator } from '../../../shared/demo/simulator';
 import { tr } from '../../../shared/i18n';
 
@@ -18,7 +19,17 @@ export interface StoreEvents {
   connection: ConnectionState;
   /** O servidor está servindo outro build do cliente: esta página está desatualizada. Emitido uma vez. */
   update: { build: string; current: string };
+  /** Outro andar escolhido (HostInfo.id; undefined = este computador). Vem antes do `snapshot` do andar novo. */
+  floor: string | undefined;
 }
+
+/** Um andar no seletor: o computador e quantos agentes dele estão trabalhando e esperando você. */
+export interface FloorSummary extends HostInfo {
+  working: number;
+  waiting: number;
+}
+
+const FLOOR_KEY = 'habblaud.floor';
 
 /**
  * Build desta página: o nome do bundle principal (ex.: "main-BFqheOCa"), tirado da URL do próprio módulo.
@@ -84,7 +95,12 @@ export function mockOptionsFrom(search: string): { speed: number; sessions: numb
 }
 
 export class OfficeStore {
+  /** O andar escolhido (salas, agentes e contas só dele); `meta` é o do servidor. */
   snapshot: OfficeSnapshot | null = null;
+  /** O prédio inteiro: todos os andares (igual a `snapshot` sem outros computadores). */
+  full: OfficeSnapshot | null = null;
+  /** Andar escolhido: HostInfo.id de outro computador, ou undefined = este. */
+  floor: string | undefined = readFloor();
   /** Feed global, do mais antigo para o mais recente. */
   feed: FeedItem[] = [];
   connection: ConnectionState = 'connecting';
@@ -158,6 +174,33 @@ export class OfficeStore {
     return this.agentIndex.get(id);
   }
 
+  /** Andares do prédio (vazio = só este computador), com quem trabalha e quem espera em cada um. */
+  floors(): FloorSummary[] {
+    const snap = this.full;
+    const hosts = snap?.meta.hosts;
+    if (!snap || !hosts || hosts.length < 2) return [];
+    return hosts.map((h) => {
+      const mine = snap.agents.filter((a) => a.host === h.id);
+      return { ...h, working: mine.filter((a) => a.status === 'working').length, waiting: mine.filter((a) => a.status === 'waiting').length };
+    });
+  }
+
+  /** Troca de andar: avisa `floor` e depois manda o `snapshot` do andar novo. */
+  setFloor(host: string | undefined): void {
+    if (host === this.floor) return;
+    this.floor = host;
+    try {
+      if (host) localStorage.setItem(FLOOR_KEY, host);
+      else localStorage.removeItem(FLOOR_KEY);
+    } catch {
+      // sem localStorage: vale só nesta página
+    }
+    if (!this.full) return void this.emit('floor', host);
+    this.index(this.view(this.full));
+    this.emit('floor', host);
+    if (this.snapshot) this.emit('snapshot', this.snapshot);
+  }
+
   room(id: string): RoomInfo | undefined {
     return this.roomIndex.get(id);
   }
@@ -209,7 +252,7 @@ export class OfficeStore {
   pushReplay(snap: OfficeSnapshot): void {
     if (!this.replay) {
       this.replay = true;
-      this.live = this.snapshot ? { snap: this.snapshot, at: Date.now() } : null;
+      this.live = this.full ? { snap: this.full, at: Date.now() } : null;
     }
     this.setSnapshot(snap);
   }
@@ -225,6 +268,7 @@ export class OfficeStore {
       this.setSnapshot({ ...live.snap, serverTime: live.snap.serverTime + (Date.now() - live.at) });
     } else {
       this.snapshot = null;
+      this.full = null;
       this.agentIndex = new Map();
       this.roomIndex = new Map();
     }
@@ -377,7 +421,7 @@ export class OfficeStore {
   }
 
   private applySnapshot(snap: OfficeSnapshot): void {
-    const cur = this.replay ? this.live?.snap : this.snapshot;
+    const cur = this.replay ? this.live?.snap : this.full;
     if (cur && snap.rev < cur.rev && snap.meta.startedAt === cur.meta.startedAt) return;
     if (this.replay) this.live = { snap, at: Date.now() };
     else this.setSnapshot(snap);
@@ -385,10 +429,24 @@ export class OfficeStore {
   }
 
   private setSnapshot(snap: OfficeSnapshot): void {
-    this.snapshot = snap;
-    this.agentIndex = new Map(snap.agents.map((a) => [a.id, a]));
-    this.roomIndex = new Map(snap.rooms.map((r) => [r.id, r]));
-    this.emit('snapshot', snap);
+    this.full = snap;
+    const view = this.view(snap);
+    this.index(view);
+    this.emit('snapshot', view);
+  }
+
+  /** O andar escolhido do prédio (sem outros computadores, o próprio snapshot). Andar que sumiu volta para este. */
+  private view(snap: OfficeSnapshot): OfficeSnapshot {
+    const hosts = snap.meta.hosts;
+    if (!hosts || hosts.length < 2) return snap;
+    if (this.floor && !hosts.some((h) => h.id === this.floor)) this.floor = undefined;
+    return floorOf(snap, this.floor);
+  }
+
+  private index(view: OfficeSnapshot): void {
+    this.snapshot = view;
+    this.agentIndex = new Map(view.agents.map((a) => [a.id, a]));
+    this.roomIndex = new Map(view.rooms.map((r) => [r.id, r]));
   }
 
   private updateAnnounced = false;
@@ -514,5 +572,13 @@ export class OfficeStore {
       this.applyFeed(r.feed);
       r.notices.forEach((n) => this.emit('notice', n));
     }, 250);
+  }
+}
+
+function readFloor(): string | undefined {
+  try {
+    return (typeof localStorage !== 'undefined' && localStorage.getItem(FLOOR_KEY)) || undefined;
+  } catch {
+    return undefined;
   }
 }

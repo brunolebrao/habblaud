@@ -9,6 +9,7 @@ import { computeCounters, shellLine, shellWaitIn, shellWaitingAgents, waitingAge
 import { TIMELAPSE_ICONS } from './timelapse';
 import { focusPermission, nextPermissionAgent, permissionAgents } from './permission';
 import { UsageCards } from './usage';
+import { FloorSwitcher } from './floors';
 import { VersionChip } from './version';
 import { wordmark } from './widgets';
 import { brandUrl, onBrand } from './brand';
@@ -38,6 +39,7 @@ export class TopBar implements UiComponent {
   /** Linha de baixo da marca (conexão, versão, selos): o chip do Habblaud World entra aqui (ui/index.ts). */
   private status: HTMLElement;
   private counters = new Map<keyof Counters, CounterRefs>();
+  private floors: FloorSwitcher;
   private shellsBtn: HTMLButtonElement;
   /** Próximo agente do botão de shells (cliques seguidos passam por todos, do que espera há mais tempo). */
   private shellCursor = 0;
@@ -120,6 +122,7 @@ export class TopBar implements UiComponent {
     }
 
     this.usage = new UsageCards(ctx);
+    this.floors = new FloorSwitcher(ctx);
 
     this.sidebarBtn = iconButton(ICONS.sidebar, tr('Painel lateral ( [ )'), () => ctx.togglePanel('sidebar'), 'ui-btn-sidebar');
     this.feedBtn = iconButton(ICONS.feed, tr('Feed de atividade ( ] )'), () => ctx.togglePanel('feed'), 'ui-btn-feed');
@@ -170,6 +173,7 @@ export class TopBar implements UiComponent {
           h('div', { class: 'ui-brand__text' }, wordmark(), this.status),
         ),
       ),
+      this.floors.el,
       counterWrap,
       this.usage.el,
       h('div', { class: 'ui-topbar__right' }, viewGroup, panelGroup),
@@ -237,6 +241,7 @@ export class TopBar implements UiComponent {
     this.renderShells(c.shells, now);
 
     this.usage.render();
+    this.floors.render();
     this.version.render();
     setHidden(this.spawnBtn, !access().spawn || store.mock || store.replaying);
 

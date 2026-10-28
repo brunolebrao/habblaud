@@ -2,12 +2,21 @@
 // Eventos nomeados: snapshot | feed | notice (o `data` é o JSON do protocolo em shared/types.ts).
 // Snapshots saem com throttle (~200 ms); feed e avisos vão em lote logo depois do snapshot.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { OfficeSnapshot } from '../../shared/types';
+import type { FeedItem, Notice, OfficeSnapshot } from '../../shared/types';
 import type { Office } from '../model/office';
 import { isLoopbackHost } from './guard';
 
 /** Cliente lento demais (buffer acumulado acima disto) é desconectado; o EventSource reconecta. */
 const MAX_BUFFERED = 8 * 1024 * 1024;
+
+/** Andares de outros computadores (server/peers/): entram só no que vai para a página. */
+export interface HubPeers {
+  merge(local: OfficeSnapshot): OfficeSnapshot;
+  recentFeed(n: number): FeedItem[];
+  onChange(cb: () => void): () => void;
+  onFeed(cb: (items: FeedItem[]) => void): () => void;
+  onNotice(cb: (n: Notice) => void): () => void;
+}
 
 export class Hub {
   private clients = new Set<ServerResponse>();
@@ -22,18 +31,33 @@ export class Hub {
   private readonly pingMs: number;
   /** Quem pode responder pelo escritório; padrão: Host local. A porta remota (http/remote.ts) troca a regra. */
   private readonly canAnswer: (req: IncomingMessage) => boolean;
+  private readonly peers: HubPeers | undefined;
+  /** Os andares de lá mudaram desde a última transmissão. */
+  private peersDirty = false;
+  private peerUnsubs: Array<() => void> = [];
 
   constructor(
     private readonly office: Office,
-    opts: { throttleMs?: number; pingMs?: number; canAnswer?: (req: IncomingMessage) => boolean } = {},
+    opts: { throttleMs?: number; pingMs?: number; canAnswer?: (req: IncomingMessage) => boolean; peers?: HubPeers } = {},
   ) {
     this.throttleMs = opts.throttleMs ?? 200;
     this.pingMs = opts.pingMs ?? 15_000;
     this.canAnswer = opts.canAnswer ?? ((req) => isLoopbackHost(req.headers.host));
+    this.peers = opts.peers;
   }
 
   start(): void {
     this.unsubscribe = this.office.onChange(() => this.schedule());
+    if (this.peers) {
+      this.peerUnsubs = [
+        this.peers.onChange(() => {
+          this.peersDirty = true;
+          this.schedule();
+        }),
+        this.peers.onFeed((items) => this.writeAll(frame('feed', items))),
+        this.peers.onNotice((n) => this.writeAll(frame('notice', n))),
+      ];
+    }
     this.pinger = setInterval(() => this.writeAll(': ping\n\n'), this.pingMs);
     this.pinger.unref?.();
   }
@@ -41,6 +65,8 @@ export class Hub {
   stop(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    for (const u of this.peerUnsubs) u();
+    this.peerUnsubs = [];
     if (this.timer) clearTimeout(this.timer);
     if (this.pinger) clearInterval(this.pinger);
     this.timer = null;
@@ -76,10 +102,11 @@ export class Hub {
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
-    const snapshot = this.current();
+    const snapshot = this.merged();
     res.write('retry: 2000\n\n');
     res.write(frame('snapshot', snapshot));
-    res.write(frame('feed', this.office.recentFeed(50)));
+    const feed = this.office.recentFeed(50);
+    res.write(frame('feed', this.peers ? [...feed, ...this.peers.recentFeed(50)] : feed));
     this.clients.add(res);
     if (this.canAnswer(req)) this.local.add(res);
     const drop = () => this.clients.delete(res);
@@ -94,8 +121,10 @@ export class Hub {
     this.timer = null;
     this.lastFlush = Date.now();
     const r = this.office.commit();
+    const peersChanged = this.peersDirty;
+    this.peersDirty = false;
+    if (r.changed || peersChanged) this.writeAll(frame('snapshot', this.peers ? this.peers.merge(r.snapshot) : r.snapshot));
     if (r.changed) {
-      this.writeAll(frame('snapshot', r.snapshot));
       for (const cb of this.snapshotCbs) {
         try {
           cb(r.snapshot);
@@ -109,7 +138,16 @@ export class Hub {
     return r.snapshot;
   }
 
-  /** Snapshot atual (depois de transmitir o que estiver pendente), com `serverTime` de agora. */
+  /** O que a página recebe: o escritório daqui com os andares de outros computadores (sem eles, igual a current()). */
+  merged(): OfficeSnapshot {
+    const local = this.current();
+    return this.peers ? this.peers.merge(local) : local;
+  }
+
+  /**
+   * Snapshot atual DESTE computador (depois de transmitir o que estiver pendente), com `serverTime` de agora. Os andares
+   * de outros computadores não entram: estatísticas, mod e Habblaud World leem só daqui.
+   */
   current(): OfficeSnapshot {
     return { ...this.flush(), serverTime: Date.now() };
   }

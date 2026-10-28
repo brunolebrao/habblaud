@@ -13,6 +13,8 @@ export interface SpawnFolder {
   lastAt: number;
   /** Sessões recentes nesta pasta. */
   sessions: number;
+  /** Outro computador (HostInfo.id; server/peers/): a pasta é de lá. Ausente = este. */
+  host?: string;
 }
 
 export const FOLDERS_LIMIT = 15;

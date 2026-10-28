@@ -13,6 +13,8 @@ import { createRemoteGate, isRemoteRequest, loadSecret, RemoteSessions, startRem
 import { Hub } from './http/sse';
 import { createStaticHandler, fileStat, REVALIDATE, sendFile } from './http/static';
 import { brandFile, loadBrand } from './brand';
+import { loadPeers } from './peers/config';
+import { PeerSet } from './peers';
 import { TerminalStreams } from './http/terminal';
 import { createTimelineHandler } from './http/timeline';
 import { TIMELINE_DIR, TimelineRecorder } from './history/timeline';
@@ -152,8 +154,12 @@ if (codex) agents.add(codex);
 const codexLive: CodexLive | undefined = codex;
 late.office = office;
 late.agents = agents;
+// Outros computadores (peers.json): andares que entram só no que vai para a página (ver server/peers/index.ts).
+const peersLoad = loadPeers(config.peersFile);
+const peers = peersLoad.file.peers.length ? new PeerSet(peersLoad.file, log) : undefined;
 // Página que pode responder pelo escritório: Host local na porta local; na remota, só com permissions liberado.
 const hub = new Hub(office, {
+  peers,
   canAnswer: (req) => (isRemoteRequest(req) ? !!config.remote?.allow.has('permissions') : isLoopbackHost(req.headers.host)),
 });
 // "Meu dia": amostra o escritório a cada segundo e persiste em <dataDir>/stats/ (ver history/daystats.ts).
@@ -344,6 +350,7 @@ if (config.demo) office.setDemo(true);
 void agents.start();
 accounts.start();
 hub.start();
+peers?.start();
 if (timeline) {
   timeline.start();
   timeline.ingest(hub.current());
@@ -392,13 +399,15 @@ const api = createApiHandler({
     const last = new Map<string, number>();
     for (const a of snap.agents) last.set(a.roomId, Math.max(last.get(a.roomId) ?? 0, a.lastEventAt ?? 0));
     const rooms = snap.rooms.filter((r) => !isDemoId(r.id)).map((r) => ({ path: r.path, lastAt: last.get(r.id) ?? 0 }));
-    return recentFolders(history ? await history.list().catch(() => []) : [], rooms);
+    const local = recentFolders(history ? await history.list().catch(() => []) : [], rooms);
+    return peers ? [...local, ...(await peers.folders())] : local;
   },
   codexLive,
   stats,
   updates,
   remote: config.remote ? { is: isRemoteRequest, allows: (f) => config.remote!.allow.has(f) } : undefined,
   world: world ? createWorldRoutes(world, worldViewer, worldSocial) : undefined,
+  peers,
 });
 
 const server = http.createServer();
@@ -529,6 +538,8 @@ server.listen(config.port, config.host, () => {
   if (config.fixedRooms.length) log.info(tr('   Salas fixas: {0}.', [config.fixedRooms.join(', ')]));
   if (brandLoad.brand) log.info(tr('   Marca própria: {0} ({1}).', [brandLoad.brand.name, config.brandDir]));
   for (const w of brandLoad.warnings) log.warn(w);
+  if (peers) log.info(tr('   Outros computadores: {0} ({1}).', [peers.links.map((l) => l.config.name).join(', '), config.peersFile]));
+  for (const w of peersLoad.warnings) log.warn(w);
   if (office.isDemo()) log.info(tr('   Modo demonstração ligado (agentes simulados misturados aos reais).'));
   if (config.terminal) log.info(tr('   Terminal: ligado (acesso só local).'));
   else log.info(tr('   Terminal: desligado ({0}).', [terminalOffReason(process.env, config.host, config.inDocker)]));
@@ -587,6 +598,7 @@ function shutdown(signal: string): void {
   agents.stop();
   accounts.stop();
   hub.stop();
+  peers?.stop();
   terminals?.stop();
   timeline?.stop();
   permissions?.stop();

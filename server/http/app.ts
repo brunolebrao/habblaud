@@ -22,6 +22,7 @@ import { AUDIO_BODY_MAX, type DictationService } from '../dictation/dictation';
 import type { DeliveryIndex } from '../deliveries/deliveries';
 import type { FileFetcher } from '../deliveries/fetcher';
 import { HOST_WAIT_MS } from '../host-wait';
+import type { BodyCarrier, PeerSet } from '../peers';
 
 export interface ApiDeps {
   office: Office;
@@ -94,6 +95,8 @@ export interface ApiDeps {
    * local com Host local: pela porta do celular, nem com login (403 `local_only`).
    */
   world?: (req: IncomingMessage, res: ServerResponse, url: URL) => void;
+  /** Andares de outros computadores (server/peers/): encaminha as ações da página nos agentes de lá. */
+  peers?: PeerSet;
 }
 
 /** GET /api/agents/:id/terminal (ids nunca contêm '/'). */
@@ -184,6 +187,8 @@ function sendFile(res: ServerResponse, data: Buffer, type: string, name: string)
 
 /** Lê o corpo JSON. Exige `Content-Type: application/json` (barreira contra CSRF; ver http/guard.ts). */
 export function readJson(req: IncomingMessage, max = MAX_BODY): Promise<unknown> {
+  // Corpo já lido pelos andares de outros computadores (server/peers/index.ts) quando o destino era daqui.
+  if ('habblaudBody' in req) return Promise.resolve((req as BodyCarrier).habblaudBody);
   if (!isJsonContentType(req.headers['content-type'])) {
     req.resume();
     return Promise.reject(new HttpError(415, tr('envie o corpo como JSON (Content-Type: application/json)')));
@@ -327,7 +332,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
     else sendJson(res, 500, { error: tr('erro interno') });
   };
 
-  return (req, res, url) => {
+  const handle = (req: IncomingMessage, res: ServerResponse, url: URL): boolean => {
     const path = url.pathname;
     if (path !== '/api' && !path.startsWith('/api/')) return false;
     const method = req.method ?? 'GET';
@@ -350,6 +355,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       } else deps.world(req, res, url);
       return true;
     }
+    if (deps.peers?.route(req, res, url, { trusted, denied, readJson, sendJson })) return true;
     if (path === '/api/stream') {
       if (method !== 'GET') methodNotAllowed(res, 'GET');
       else hub.attach(req, res);
@@ -719,4 +725,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
     sendJson(res, 404, { error: tr('rota desconhecida') });
     return true;
   };
+  const peers = deps.peers;
+  if (peers) peers.localNext = (req, res) => void handle(req, res, new URL(req.url ?? '/', 'http://localhost'));
+  return handle;
 }

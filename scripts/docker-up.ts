@@ -62,6 +62,8 @@ const CONTAINER_USAGE_DIR = '/usage';
 const CONTAINER_REMOTE_TLS_DIR = '/remote-tls';
 /** Marca própria (server/brand.ts): ~/.habblaud/brand do host, somente leitura. */
 const CONTAINER_BRAND_DIR = '/brand';
+/** Outros computadores (server/peers/): ~/.habblaud/peers do host (peers.json, com as senhas), somente leitura. */
+const CONTAINER_PEERS_DIR = '/peers';
 /** Anexos das mensagens (server/messages/http.ts): ~/.habblaud/attachments do host, a ÚNICA montagem com escrita. */
 const CONTAINER_ATTACHMENTS_DIR = '/attachments';
 const SERVICE = 'habblaud';
@@ -325,6 +327,7 @@ export function renderOverride(
   fixedRooms: string[] = [],
   brandDir?: string,
   attachmentsDir?: string,
+  peersDir?: string,
 ): string {
   const env: Array<[string, string]> = [
     ['HABBLAUD_CLAUDE_DIRS', mounts.map((m) => m.mountDir).join(',')],
@@ -336,6 +339,7 @@ export function renderOverride(
   if (hiddenDirs.length) env.push(['HABBLAUD_IGNORE_DIRS', hiddenDirs.join(',')]);
   if (fixedRooms.length) env.push(['HABBLAUD_FIXED_ROOMS', fixedRooms.join(',')]);
   if (brandDir) env.push(['HABBLAUD_BRAND_DIR', CONTAINER_BRAND_DIR]);
+  if (peersDir) env.push(['HABBLAUD_PEERS_FILE', `${CONTAINER_PEERS_DIR}/peers.json`]);
   if (attachmentsDir) env.push(['HABBLAUD_ATTACHMENTS_DIR', CONTAINER_ATTACHMENTS_DIR], ['HABBLAUD_ATTACHMENTS_HOST_DIR', attachmentsDir]);
   const lines = [
     `# Gerado por scripts/docker-up.ts em ${generatedAt.toISOString()} — não edite: é recriado a cada \`npm run docker:up\`.`,
@@ -354,6 +358,7 @@ export function renderOverride(
   // Acesso remoto: SÓ a pasta do certificado do servidor (a chave da CA fica no host).
   if (remoteTlsDir) binds.push({ source: remoteTlsDir, target: CONTAINER_REMOTE_TLS_DIR });
   if (brandDir) binds.push({ source: brandDir, target: CONTAINER_BRAND_DIR });
+  if (peersDir) binds.push({ source: peersDir, target: CONTAINER_PEERS_DIR });
   const writable = attachmentsDir ? [{ source: attachmentsDir, target: CONTAINER_ATTACHMENTS_DIR }] : [];
   if (binds.length || writable.length) {
     lines.push('    volumes:');
@@ -467,6 +472,16 @@ function ensureAttachmentsDir(): string | undefined {
   try {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     return realpathSync(dir);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Pasta dos outros computadores no host (~/.habblaud/peers com peers.json; caminho real), ou undefined. */
+export function peersDirFor(home: string): string | undefined {
+  const dir = join(home, '.habblaud', 'peers');
+  try {
+    return statSync(join(dir, 'peers.json')).isFile() ? realpathSync(dir) : undefined;
   } catch {
     return undefined;
   }
@@ -766,10 +781,12 @@ async function up(opts: Options, port: number): Promise<void> {
   const attachmentsDir = ensureAttachmentsDir();
   if (attachmentsDir) say(tr('Anexos das mensagens: monta {0} em {1} (gravação só nesta pasta).', [tildify(attachmentsDir), CONTAINER_ATTACHMENTS_DIR]));
   if (brandDir) say(tr('Marca própria: monta {0} em {1}, somente leitura.', [tildify(brandDir), CONTAINER_BRAND_DIR]));
+  const peersDir = peersDirFor(HOME);
+  if (peersDir) say(tr('Outros computadores: monta {0} em {1}, somente leitura.', [tildify(peersDir), CONTAINER_PEERS_DIR]));
   const tmp = `${OVERRIDE_FILE}.tmp`;
   writeFileSync(
     tmp,
-    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir, attachmentsDir),
+    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir, attachmentsDir, peersDir),
     { mode: 0o600 },
   );
   chmodSync(tmp, 0o600);

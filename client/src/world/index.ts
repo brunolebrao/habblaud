@@ -428,6 +428,12 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore, o: Cr
   const offArt = store.on('snapshot', (snap) => syncArt(snap.meta.brand));
   if (store.snapshot) syncArt(store.snapshot.meta.brand);
   abort.signal.addEventListener('abort', offArt);
+  // Outro andar (outro computador, server/peers/): prédio novo, montado de uma vez pelo snapshot que vem em seguida.
+  const offFloor = store.on('floor', () => {
+    rebuild();
+    userMoved = false;
+  });
+  abort.signal.addEventListener('abort', offFloor);
 
   return {
     select: (sel, opts) => setSelection(sel, !!opts?.focus),

@@ -44,6 +44,8 @@ export interface FolderOption {
   name: string;
   lastAt: number;
   sessions?: number;
+  /** Outro computador (server/peers/): a pasta é de lá. Ausente = este. */
+  host?: string;
 }
 
 /** Pastas das salas, da mais recente para a mais antiga (reserva quando o servidor não manda a lista). */
@@ -265,7 +267,10 @@ export class SpawnPanel {
   private async loadFolders(): Promise<void> {
     try {
       const r = await api<{ folders: FolderOption[] }>('/api/spawn/folders');
-      if (Array.isArray(r.folders) && r.folders.length) this.setFolders(r.folders);
+      // Só as pastas do andar escolhido (o agente nasce no computador dele).
+      const floor = this.ctx.store.floor;
+      const mine = Array.isArray(r.folders) ? r.folders.filter((f) => (f.host ?? undefined) === floor) : [];
+      if (mine.length) this.setFolders(mine);
     } catch {
       // fica a lista das salas
     }
@@ -378,11 +383,14 @@ export class SpawnPanel {
     if (!folder) return this.say(tr('Escolha o projeto.'), true);
     this.busy = true;
     this.submitBtn.disabled = true;
+    // O agente nasce no computador do andar escolhido (server/peers/ encaminha o pedido).
+    const host = this.ctx.store.floor;
+    const onHost = host ? `?host=${encodeURIComponent(host)}` : '';
     try {
       const ids: string[] = [];
       for (const [i, f] of this.files.entries()) {
         this.say(this.files.length > 1 ? tr('Enviando anexos ({0} de {1})…', [i + 1, this.files.length]) : tr('Enviando o anexo…'));
-        const r = await api<{ id: string }>('/api/spawn/attachments', {
+        const r = await api<{ id: string }>(`/api/spawn/attachments${onHost}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: f.file.name, type: f.file.type, data: await fileToBase64(f.file) }),
@@ -393,7 +401,7 @@ export class SpawnPanel {
       let info = await api<SpawnInfo>('/api/spawn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder, prompt: this.prompt.value, ...(this.modeSel.value ? { mode: this.modeSel.value } : {}), ...(ids.length ? { attachments: ids } : {}) }),
+        body: JSON.stringify({ folder, prompt: this.prompt.value, ...(this.modeSel.value ? { mode: this.modeSel.value } : {}), ...(ids.length ? { attachments: ids } : {}), ...(host ? { host } : {}) }),
       });
       const end = Date.now() + WAIT_MS;
       while ((info.status === 'queued' || info.status === 'sent') && Date.now() < end) {

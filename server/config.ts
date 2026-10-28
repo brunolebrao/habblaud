@@ -65,6 +65,8 @@ export interface ServerConfig {
   fixedRooms: string[];
   /** Pasta da marca própria (server/brand.ts): HABBLAUD_BRAND_DIR ou <dataDir>/brand. */
   brandDir: string;
+  /** Outros computadores (server/peers/): HABBLAUD_PEERS_FILE ou ~/.habblaud/peers/peers.json. Sem o arquivo, só este. */
+  peersFile: string;
   /** Segunda porta, com login, para o celular na rede local (http/remote.ts); ausente = desligada. */
   remote?: RemoteConfig;
   /** Por que o acesso remoto ficou desligado quando as variáveis estão incompletas. */
@@ -266,6 +268,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
     hiddenDirs: parseHiddenDirs(env.HABBLAUD_IGNORE_DIRS, home),
     fixedRooms: parseDirList(env.HABBLAUD_FIXED_ROOMS, home),
     brandDir: resolve(env.HABBLAUD_BRAND_DIR?.trim() || join(dataDir, 'brand')),
+    peersFile: resolve(env.HABBLAUD_PEERS_FILE?.trim() || join(home, '.habblaud', 'peers', 'peers.json')),
     remote: remote.config,
     remoteWarning: remote.warning,
     world: parseWorldConfig(env, argv),

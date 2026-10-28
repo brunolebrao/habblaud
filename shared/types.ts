@@ -186,6 +186,8 @@ export interface AgentInfo {
    * e perguntou pela caixa de entrada há pouco. Ver POST /api/messages.
    */
   canMessage?: boolean;
+  /** Outro computador (HABBLAUD_PEERS; HostInfo.id): o agente roda lá e os ids vêm com "@<computador>:". Ausente = este. */
+  host?: string;
 }
 
 export interface RoomInfo {
@@ -209,6 +211,8 @@ export interface RoomInfo {
   fixed?: true;
   /** Efeito visual temporário na sala (eventos do GitHub detectados nos transcripts; ver shared/github.ts). */
   effect?: RoomEffect;
+  /** Outro computador (HostInfo.id): a sala é de lá. Ausente = este. */
+  host?: string;
 }
 
 /**
@@ -328,6 +332,22 @@ export interface AccountInfo {
    * - disabled: sem números (tap de statusline não instalado e nenhum cache do /usage).
    */
   usageStatus: 'ok' | 'stale' | 'disabled';
+  /** Outro computador (HostInfo.id): a conta é de lá. Ausente = este. */
+  host?: string;
+}
+
+/**
+ * Um andar do prédio: este computador (sem `id`) ou outro que a central acompanha (HABBLAUD_PEERS, server/peers/).
+ * Agentes, salas e contas dos outros vêm com `host` = `id` e os ids prefixados (shared/hosts.ts).
+ */
+export interface HostInfo {
+  /** Ausente = este computador. */
+  id?: string;
+  name: string;
+  /** Conexão com o outro computador (este está sempre 'online'). */
+  state: 'online' | 'connecting' | 'offline';
+  /** Por que não conectou (texto para a pessoa). */
+  error?: string;
 }
 
 export interface OfficeSnapshot {
@@ -381,6 +401,8 @@ export interface OfficeSnapshot {
     brand?: BrandInfo;
     /** A caixa de mensagem aceita anexos (gravados no computador; a mensagem leva os caminhos). */
     messageAttachments?: boolean;
+    /** Andares (este computador primeiro e os outros de HABBLAUD_PEERS). Ausente = só este computador. */
+    hosts?: HostInfo[];
   };
 }
 
