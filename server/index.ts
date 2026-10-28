@@ -298,6 +298,7 @@ const studio = config.studio
       root: config.studioDir,
       stateFile: join(config.dataDir, 'studio.json'),
       generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir }) : undefined,
+      agentName: (session) => office.list().find((a) => a.sessionId === session && !a.id.startsWith(`${session}:`))?.name,
       // "Pedir ajuste": o comentário vai à sessão que escreveu o pedido, pelas mensagens do escritório.
       notify: (session, text) => {
         if (!messages) return { error: tr('mensagens pelo escritório desligadas: peça o ajuste direto ao agente') };

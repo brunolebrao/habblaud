@@ -150,13 +150,15 @@ describe('StudioService', () => {
 
   it('pedir ajuste: o comentário vai à sessão do agente e o pedido sai da lista', () => {
     const sent: Array<[string, string]> = [];
-    const s = svc({ notify: (session, text) => (sent.push([session, text]), { ok: true }) });
+    const s = svc({ notify: (session, text) => (sent.push([session, text]), { ok: true }), agentName: (session) => (session === '00ecdadc-2c4f-4679' ? 'Simone' : undefined) });
     s.submit({ project: 'p', title: 'Vaso', prompt: 'um vaso', session: '00ecdadc-2c4f-4679' });
     s.submit({ project: 'p', prompt: 'sem sessão' });
+    expect(s.jobs().find((j) => j.id === 'j1')?.reviseTo).toBe('Simone');
     expect(s.revise('j1', { note: '' })).toMatchObject({ error: expect.any(String) });
     expect(s.revise('j2', { note: 'mais fofo' })).toMatchObject({ error: expect.any(String) });
     expect(s.revise('j1', { note: 'mais fofo' })).toEqual({ ok: true });
     expect(sent[0]![0]).toBe('00ecdadc-2c4f-4679');
+    expect(sent[0]![1]).toContain('```text');
     expect(sent[0]![1]).toContain('mais fofo');
     expect(sent[0]![1]).toContain('um vaso');
     expect(s.jobs().map((j) => j.id)).toEqual(['j2']);

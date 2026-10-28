@@ -27,6 +27,8 @@ export interface StudioJobView {
   requestedBy?: string;
   /** O agente disse de qual conversa veio: dá para pedir ajuste. */
   session?: boolean;
+  /** Para quem o ajuste vai (nome no escritório); ausente = ninguém para receber. */
+  reviseTo?: string;
   file?: string;
   error?: string;
 }
@@ -77,7 +79,7 @@ export function parseStudio(raw: unknown): StudioState {
   const jobs = list(o.jobs).flatMap((j): StudioJobView[] => {
     const x = rec(j);
     if (typeof x.id !== 'string' || !STATUSES.includes(x.status as string)) return [];
-    return [{ id: x.id, project: str(x.project) ?? '', title: str(x.title) ?? '', prompt: str(x.prompt) ?? '', status: x.status as StudioJobView['status'], at: Number(x.at) || 0, requestedBy: str(x.requestedBy), session: typeof x.session === 'string' && !!x.session, file: file(x.file), error: str(x.error) }];
+    return [{ id: x.id, project: str(x.project) ?? '', title: str(x.title) ?? '', prompt: str(x.prompt) ?? '', status: x.status as StudioJobView['status'], at: Number(x.at) || 0, requestedBy: str(x.requestedBy), session: typeof x.session === 'string' && !!x.session, reviseTo: str(x.reviseTo), file: file(x.file), error: str(x.error) }];
   });
   const items = list(o.items).flatMap((i): StudioItemView[] => {
     const x = rec(i);
@@ -429,8 +431,13 @@ export class Studio implements UiComponent {
     const sendNote = h('button', { class: 'ui-btn ui-btn--primary', type: 'button', text: tr('Mandar ajuste') });
     const noteBox = h('div', { class: 'ui-studio__note' }, note, h('div', { class: 'ui-studio__actions' }, sendNote));
     setHidden(noteBox, true);
-    const revise = h('button', { class: 'ui-btn', type: 'button', text: tr('Pedir ajuste'), attrs: { title: j.session ? tr('Manda o seu comentário ao agente, que escreve outra versão') : tr('Este pedido não diz de qual conversa veio') } }) as HTMLButtonElement;
-    revise.disabled = !j.session;
+    const revise = h('button', {
+      class: 'ui-btn',
+      type: 'button',
+      text: j.reviseTo ? tr('Pedir ajuste a {0}', [j.reviseTo]) : tr('Pedir ajuste'),
+      attrs: { title: j.reviseTo ? tr('Manda o seu comentário a {0}, que escreve outra versão', [j.reviseTo]) : tr('A conversa que fez este pedido não está no escritório') },
+    }) as HTMLButtonElement;
+    revise.disabled = !j.reviseTo;
     revise.addEventListener('click', () => {
       setHidden(noteBox, false);
       setHidden(revise, true);
