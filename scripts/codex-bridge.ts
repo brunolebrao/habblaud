@@ -403,7 +403,8 @@ async function main(): Promise<void> {
   if (!parsed.once) {
     const waitPost = httpPost(parsed.port, HOST_WAIT_MS + 10_000);
     const accountDirs = discoverClaudeDirs(process.env);
-    const roots = [...tempRoots(), attachmentsRoot()];
+    // A pasta do Estúdio também: o Codex responde com o caminho das imagens que gerou, e elas abrem pelo escritório.
+    const roots = [...tempRoots(), attachmentsRoot(), studioRoot(process.env)];
     const inside = (p: string) => insideKnownFolder(p, { accountDirs, roots });
     void waitLoop(() => filesRound(waitPost, log, undefined, undefined, { inside, wait: true }));
     if (transcribe) {
