@@ -3454,4 +3454,6 @@ export const ES: Readonly<Record<string, string>> = {
   "imagem base inválida (precisa ser da galeria deste projeto)": "imagen base inválida (debe ser de la galería de este proyecto)",
   "Não editar: gerar uma imagem nova": "No editar: generar una imagen nueva",
   "O que mudar nesta imagem? (ex.: fundo transparente, mais escuro, sem a tampa)": "¿Qué cambiar en esta imagen? (ej.: fondo transparente, más oscuro, sin la tapa)",
+  "Mês (30 dias)": "Mes (30 días)",
+  "Mês": "Mes",
 };

@@ -146,6 +146,11 @@ describe('rollout do Codex: paginated', () => {
     expect(usageFromRateLimits({ ...rl, limit_id: null }, 1)).toMatchObject({ fiveHour: { utilization: 12.5 } });
   });
 
+  it('uso do plano free: uma janela só, de 30 dias', () => {
+    const rl = { limit_id: 'codex', primary: { used_percent: 13, window_minutes: 43200, resets_at: 1795722488 }, secondary: null, plan_type: 'free' };
+    expect(usageFromRateLimits(rl, 1)).toEqual({ source: 'codex', fetchedAt: 1, thirtyDay: { utilization: 13, resetsAt: 1795722488000 } });
+  });
+
   it('GitHub: o push que deu certo vira evento; o que falhou, não', () => {
     const ok = 'To github.com:o/r.git\n   abc1234..def5678  main -> main\n';
     const rejected = 'To github.com:o/r.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs\n';

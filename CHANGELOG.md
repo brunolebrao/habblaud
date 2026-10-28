@@ -12,6 +12,8 @@ do meio (0.**3**.0).
 
 ### Adicionado
 
+- **Codex no plano free:** o cartão de uso mostra a janela de 30 dias ("Mês") e o plano certo; antes essa leitura era descartada e o cartão ficava parado na última leitura de outro plano.
+
 - **Andares de outros computadores** (`~/.habblaud/peers/peers.json`): a central acompanha o Habblaud de outros
   computadores da rede pela porta com login de cada um e mostra cada computador como um andar, com um seletor no topo
   (quem trabalha e quem espera você em cada andar). Mensagens (com anexos), permissões, Novo agente e o terminal somente

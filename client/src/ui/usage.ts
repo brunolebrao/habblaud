@@ -7,7 +7,7 @@
 // Conta do Codex: os números vêm dos arquivos de sessão dele, que só se renovam enquanto alguma sessão roda; por isso
 // a idade ("há 12 min") fica sempre à mostra. Sem cota nem créditos ("sem cota") nunca vira 0%. Não há o que
 // instalar para o uso: "Como funciona" abre a ajuda na seção do Codex. Sem Opus/Sonnet nem e-mail (só o plano).
-import type { AccountInfo } from '../../../shared/types';
+import type { AccountInfo, AccountUsage } from '../../../shared/types';
 import type { UiContext } from './context';
 import { h, KeyedList, setAttr, setHidden, setStyleVar, setText, setTitle, setVariant } from './dom';
 import { FIVE_HOURS_MS, relativeTime, usageLevel, usageWindowView, WEEK_MS, type UsageWindowView } from './format';
@@ -16,6 +16,9 @@ import { isCodex } from './provider';
 import { usageRowFits } from './usage-row';
 import { createAccountChip, createProviderTag, updateAccountChip, updateProviderTag } from './widgets';
 import { tr } from '../../../shared/i18n';
+
+/** Janela de 30 dias (Codex no plano free). */
+const MONTH_MS = 30 * 24 * 3_600_000;
 
 export const SOURCE_LABEL: Record<NonNullable<AccountInfo['usage']>['source'], string> = {
   cache: tr('cache do /usage do Claude Code'),
@@ -57,6 +60,8 @@ interface Meter {
   reset: HTMLElement;
   resetLong: HTMLElement;
   resetShort: HTMLElement;
+  labelLong: HTMLElement;
+  labelShort: HTMLElement;
 }
 
 interface CardRefs {
@@ -91,14 +96,11 @@ function createMeter(long: string, short: string, title: string): Meter {
   const resetLong = h('span', { class: 'ui-meter__reset-long' });
   const resetShort = h('span', { class: 'ui-meter__reset-short' });
   const reset = h('span', { class: 'ui-meter__reset' }, resetLong, resetShort);
-  const label = h(
-    'span',
-    { class: 'ui-meter__label' },
-    h('span', { class: 'ui-meter__label-long', text: long }),
-    h('span', { class: 'ui-meter__label-short', text: short, attrs: { 'aria-hidden': 'true' } }),
-  );
+  const labelLong = h('span', { class: 'ui-meter__label-long', text: long });
+  const labelShort = h('span', { class: 'ui-meter__label-short', text: short, attrs: { 'aria-hidden': 'true' } });
+  const label = h('span', { class: 'ui-meter__label' }, labelLong, labelShort);
   const el = h('div', { class: 'ui-meter', role: 'img', attrs: { 'aria-label': title } }, label, bar, pct, reset);
-  return { el, bar, pct, reset, resetLong, resetShort };
+  return { el, bar, pct, reset, resetLong, resetShort, labelLong, labelShort };
 }
 
 function updateMeter(m: Meter, view: UsageWindowView | null, windowName: string): void {
@@ -155,7 +157,13 @@ export function createUsageSetup(): HTMLElement {
 export type CardState = 'ok' | 'stale' | 'empty' | 'noquota';
 
 function hasWindows(a: Pick<AccountInfo, 'usage'>): boolean {
-  return !!a.usage && !!(a.usage.fiveHour || a.usage.sevenDay);
+  return !!a.usage && !!(a.usage.fiveHour || a.usage.sevenDay || a.usage.thirtyDay);
+}
+
+/** A janela longa do cartão: a semana, ou os 30 dias do Codex no plano free (que não tem semana). */
+function longWindow(u: AccountUsage | undefined, now: number): { view: UsageWindowView | null; name: string; long: string; short: string } {
+  if (u && !u.sevenDay && u.thirtyDay) return { view: usageWindowView(u.thirtyDay, u.fetchedAt, now, MONTH_MS), name: tr('Mês (30 dias)'), long: tr('Mês'), short: tr('Mês') };
+  return { view: u ? usageWindowView(u.sevenDay, u.fetchedAt, now, WEEK_MS) : null, name: tr('Semana'), long: tr('Semana'), short: tr('Sem.') };
 }
 
 /** Estado efetivo do cartão. */
@@ -348,12 +356,15 @@ export class UsageCards {
     const state = cardState(a);
     setVariant(card, 'is-', state);
     const five = usage ? usageWindowView(usage.fiveHour, usage.fetchedAt, now, FIVE_HOURS_MS) : null;
-    const week = usage ? usageWindowView(usage.sevenDay, usage.fetchedAt, now, WEEK_MS) : null;
+    const long = longWindow(usage, now);
+    const week = long.view;
     const showMeters = hasWindows(a);
     setHidden(r.meters, !showMeters);
     if (usage && showMeters) {
       updateMeter(r.five, five, tr('Sessão de 5 horas'));
-      updateMeter(r.week, week, tr('Semana'));
+      setText(r.week.labelLong, long.long);
+      setText(r.week.labelShort, long.short);
+      updateMeter(r.week, week, long.name);
     }
     r.meters.classList.toggle('is-dim', state !== 'ok');
 
@@ -402,9 +413,9 @@ export class UsageCards {
     rows.push([tr('Pasta'), a.configDir]);
     rows.push([tr('Sessões abertas'), String(a.sessions)]);
     const u = a.usage;
-    if (u && (u.fiveHour || u.sevenDay)) {
+    if (u && (u.fiveHour || u.sevenDay || u.thirtyDay)) {
       rows.push([tr('Sessão de 5 h'), five?.summary ?? '—']);
-      rows.push([tr('Semana'), week?.summary ?? '—']);
+      rows.push([longWindow(u, now).name, week?.summary ?? '—']);
       // Opus e Sonnet são janelas do Claude: no Codex não existem.
       const opus = codex ? null : usageWindowView(u.sevenDayOpus, u.fetchedAt, now, WEEK_MS);
       const sonnet = codex ? null : usageWindowView(u.sevenDaySonnet, u.fetchedAt, now, WEEK_MS);

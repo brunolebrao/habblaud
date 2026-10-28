@@ -285,6 +285,8 @@ export interface AccountUsage {
   fiveHour?: UsageWindow;
   /** Limite semanal (todos os modelos). */
   sevenDay?: UsageWindow;
+  /** Limite de 30 dias (Codex no plano free: no lugar da sessão de 5 h e da semana). */
+  thirtyDay?: UsageWindow;
   sevenDayOpus?: UsageWindow;
   sevenDaySonnet?: UsageWindow;
   /**
