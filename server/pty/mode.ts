@@ -5,27 +5,39 @@ import type { PermissionModeChoice } from '../../shared/types';
 
 /** Shift+Tab no terminal (CSI Z). */
 export const SHIFT_TAB = '\x1b[Z';
-/** Indicador de cada modo no rodapé ("⏸ manual mode on", "⏵⏵ accept edits on"...). */
-const INDICATORS: ReadonlyArray<[string, PermissionModeChoice | 'bypassPermissions' | 'dontAsk']> = [
-  ['bypass permissions on', 'bypassPermissions'],
-  ["don't ask on", 'dontAsk'],
-  ['auto mode on', 'auto'],
-  ['plan mode on', 'plan'],
-  ['accept edits on', 'acceptEdits'],
-  ['manual mode on', 'default'],
-];
-/** Dicas do rodapé do prompt no modo manual, nas versões sem o indicador (parado ou trabalhando). */
-const DEFAULT_MARKS = ['? for shortcuts', 'esc to interrupt'];
-/** Linhas do fim da tela onde o rodapé fica. */
-const FOOTER_LINES = 8;
+/** Indicador de cada modo na linha do rodapé ("⏸ manual mode on", "⏵⏵ accept edits on"...), com o símbolo no começo. */
+const INDICATOR = /^\s*[⏸⏵]+\s*(manual mode|accept edits|plan mode|auto mode|bypass permissions|don't ask) on\b/;
+const MODES: Record<string, PermissionModeChoice | 'bypassPermissions' | 'dontAsk'> = {
+  'manual mode': 'default',
+  'accept edits': 'acceptEdits',
+  'plan mode': 'plan',
+  'auto mode': 'auto',
+  'bypass permissions': 'bypassPermissions',
+  "don't ask": 'dontAsk',
+};
+/** Dica do rodapé no modo manual, nas versões sem o indicador (parado ou trabalhando), também no começo da linha. */
+const DEFAULT_HINT = /^\s*(\? for shortcuts|esc to interrupt)\b/;
+/** Régua da caixa do prompt: o rodapé são as linhas abaixo da última. */
+const RULE = /^\s*─{20,}\s*$/;
 
-/** Modo que o rodapé mostra (undefined = não deu para ler: tela vazia, um diálogo aberto). */
+/**
+ * Modo que o rodapé mostra (undefined = não deu para ler: tela vazia, um diálogo aberto). Só as linhas abaixo da
+ * caixa do prompt contam, e o indicador tem de começar a linha: um texto do agente com "plan mode on" não engana.
+ */
 export function modeFromScreen(text: string): PermissionModeChoice | 'bypassPermissions' | 'dontAsk' | undefined {
   const lines = text.replace(/\s+$/, '').split('\n');
-  if (!lines.join('').trim()) return undefined;
-  const footer = lines.slice(-FOOTER_LINES).join('\n').toLowerCase();
-  for (const [mark, mode] of INDICATORS) if (footer.includes(mark)) return mode;
-  // Versões que não mostram nada no modo manual: só vale com o rodapé do prompt à vista (um diálogo, como o de
-  // confiar na pasta, não tem).
-  return DEFAULT_MARKS.some((m) => footer.includes(m)) ? 'default' : undefined;
+  let rule = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (RULE.test(lines[i]!)) {
+      rule = i;
+      break;
+    }
+  }
+  if (rule === -1) return undefined;
+  const footer = lines.slice(rule + 1).map((l) => l.toLowerCase());
+  for (const line of footer) {
+    const m = INDICATOR.exec(line);
+    if (m) return MODES[m[1]!];
+  }
+  return footer.some((l) => DEFAULT_HINT.test(l)) ? 'default' : undefined;
 }

@@ -369,6 +369,7 @@ describe('carregar o node-pty e achar o claude', () => {
 
 describe('PtyManager: trocar o modo', () => {
   const FOOTERS = ['⏸ manual mode on', '⏵⏵ accept edits on (shift+tab to cycle)', '⏸ plan mode on (shift+tab to cycle)', '⏵⏵ auto mode on'];
+  const PROMPT = `${'─'.repeat(40)}\n❯ \n${'─'.repeat(40)}`;
 
   /** Terminal aberto aqui cujo rodapé anda um modo a cada Shift+Tab. */
   function withFooter(cycle = FOOTERS) {
@@ -384,7 +385,7 @@ describe('PtyManager: trocar o modo', () => {
         };
         return proc;
       },
-      createScreen: () => ({ write: (_d, done) => done?.(), resize() {}, serialize: () => '', text: () => `> \n${cycle[presses % cycle.length]}`, dispose() {} }),
+      createScreen: () => ({ write: (_d, done) => done?.(), resize() {}, serialize: () => '', text: () => `${PROMPT}\n${cycle[presses % cycle.length]}`, dispose() {} }),
     });
     const info = s.manager.create({ cwd: tmpdir() });
     return { s, agent: info.agentId!, presses: () => presses };
@@ -415,17 +416,22 @@ describe('PtyManager: trocar o modo', () => {
 });
 
 describe('modeFromScreen', () => {
-  it('lê o modo no rodapé', () => {
-    expect(modeFromScreen('texto\n  ⏵⏵ accept edits on (shift+tab to cycle)')).toBe('acceptEdits');
-    expect(modeFromScreen('x\n⏸ plan mode on')).toBe('plan');
-    expect(modeFromScreen('x\n⏵⏵ bypass permissions on')).toBe('bypassPermissions');
-    expect(modeFromScreen('> \n  ? for shortcuts')).toBe('default');
-    expect(modeFromScreen('❯ \n⏸ manual mode on · ← 2 agents')).toBe('default');
+  const RULE = '────────────────────────────────────────';
+  const screen = (...footer: string[]) => ['resposta do agente', RULE, '❯ ', RULE, ...footer].join('\n');
+
+  it('lê o modo no rodapé, abaixo da caixa do prompt', () => {
+    expect(modeFromScreen(screen('  ⏵⏵ accept edits on (shift+tab to cycle)'))).toBe('acceptEdits');
+    expect(modeFromScreen(screen('⏸ plan mode on'))).toBe('plan');
+    expect(modeFromScreen(screen('⏵⏵ bypass permissions on'))).toBe('bypassPermissions');
+    expect(modeFromScreen(screen('⏸ manual mode on · ← 2 agents'))).toBe('default');
+    expect(modeFromScreen(screen('  ? for shortcuts'))).toBe('default');
     expect(modeFromScreen('   \n ')).toBeUndefined();
     expect(modeFromScreen('Quick safety check: Is this a project you created or one you trust?\n❯ No, exit\nEnter to confirm · Esc to cancel')).toBeUndefined();
   });
 
-  it('ignora "plan mode on" que só aparece lá em cima na conversa', () => {
-    expect(modeFromScreen(['plan mode on', ...Array(20).fill('linha'), '? for shortcuts'].join('\n'))).toBe('default');
+  it('texto do agente com o nome de um modo não engana', () => {
+    expect(modeFromScreen(['⏸ plan mode on', RULE, '❯ ', RULE, '⏸ manual mode on'].join('\n'))).toBe('default');
+    expect(modeFromScreen(screen('agora: plan mode on'))).toBeUndefined();
+    expect(modeFromScreen('linha\n⏸ plan mode on')).toBeUndefined();
   });
 });
