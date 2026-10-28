@@ -26,7 +26,7 @@ describe('links', () => {
     expect(reviewLabel('https://github.com/dono/repo/pull/42')).toBe('PR #42');
     expect(reviewLabel('https://github.com/dono/repo/pull/42/files')).toBe('PR #42');
     expect(reviewLabel('https://gitlab.com/grupo/sub/proj/-/merge_requests/7')).toBe('MR !7');
-    expect(reviewLabel('https://gitlab.empresa.com.br/g/p/-/merge_requests/3/diffs')).toBe('MR !3');
+    expect(reviewLabel('https://gitlab.empresa.com.br/g/p/-/merge_requests/3/diffs')).toBe('MR !3 · gitlab.empresa.com.br');
     expect(reviewLabel('https://github.com/dono/repo/issues/42')).toBeUndefined();
     expect(reviewLabel('https://evil.com/dono/repo/pull/1')).toBeUndefined();
   });
