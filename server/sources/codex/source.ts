@@ -69,7 +69,7 @@ const LEGACY_WORKING_MS = 90_000;
 const PREFIX_HISTORY = 120;
 /** Resultados guardados ao ler um rollout antes de o agente entrar no escritório. */
 const BACKLOG_MAX = 400;
-/** Conta sem sessão aberta ao subir: quantos rollouts recentes tentar até achar um com o uso do plano. */
+/** Ao subir: quantos rollouts recentes tentar até achar um com o uso do plano. */
 const SEED_USAGE_FILES = 8;
 const MAIN_ROLE = tr('Agente principal (Codex)');
 const SUB_ROLE = tr('Subagente (Codex)');
@@ -236,7 +236,9 @@ export class CodexSource implements AgentSource, CodexLive {
     try {
       for (const acc of this.accs) acc.index.scanAll();
       this.poll(true);
-      for (const acc of this.accs) if (!acc.usage) this.seedUsage(acc);
+      // Sempre: as sessões abertas podem ter números mais velhos que os de uma já fechada (ex.: um `codex exec` que
+      // acabou de rodar). pushUsage fica com a leitura mais nova.
+      for (const acc of this.accs) this.seedUsage(acc);
     } finally {
       this.opts.office.endBoot();
     }
@@ -745,7 +747,7 @@ export class CodexSource implements AgentSource, CodexLive {
   }
 
   /**
-   * Conta sem sessão aberta ao subir: o uso do rollout mais recente que tenha números (fica "desatualizado" com a
+   * Ao subir: o uso do rollout mais recente que tenha números (fica "desatualizado" com a
    * idade: os números do Codex só se renovam com alguma sessão rodando). Por mtime em TODAS as pastas de data (uma
    * sessão retomada continua no arquivo da pasta antiga), tentando os SEED_USAGE_FILES mais recentes: o último pode não
    * ter `token_count` nenhum (sessão sem resposta, ou arquivada logo).
