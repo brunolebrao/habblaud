@@ -186,6 +186,59 @@ export interface CodexImageOptions {
   mirror?: string;
 }
 
+const GUIDE_MARK = '<!-- Gerado pelo Estúdio do Habblaud';
+
+/** CLAUDE.md da pasta do projeto: a agente aberta ali já sabe o estilo, o que existe e como pedir imagens. */
+export function projectGuide(p: { slug: string; name: string; description?: string; style?: string }): string {
+  return [
+    `${GUIDE_MARK}: refeito quando o projeto muda no painel. Para escrever o seu, apague esta linha. -->`,
+    `# Projeto do Estúdio: ${p.name}`,
+    '',
+    `Você é a agente deste projeto de imagens do Estúdio do Habblaud (projeto \`${p.slug}\`, esta pasta).`,
+    ...(p.description ? ['', p.description] : []),
+    '',
+    '## Guia de estilo',
+    p.style
+      ? `O Estúdio soma este guia a todo prompt: não repita, descreva só a peça.\n\n> ${p.style.replace(/\n/g, '\n> ')}`
+      : 'Sem guia de estilo: os prompts vão como estão.',
+    '',
+    '## Como trabalhar',
+    '- Converse com o usuário, proponha ideias e escreva um prompt por imagem (uma peça por imagem).',
+    '- Antes de propor, leia os `.md` das imagens que já existem (`./<data>/*.md`: título e prompt) para não repetir e manter tudo coerente.',
+    '- Mande cada imagem como pedido esperando aprovação; quem gera é o usuário, no painel (Gerar, Descartar ou Pedir ajuste). Nunca gere direto nem rode o Codex.',
+    '- Para mandar (monte o JSON com python3 ou jq, para as aspas):',
+    '',
+    '```sh',
+    `curl -s -X POST localhost:4747/api/studio -H 'Content-Type: application/json' -d '{"project":"${p.slug}","title":"…","prompt":"…","requestedBy":"Claude","session":"'"$CLAUDE_CODE_SESSION_ID"'"}'`,
+    '```',
+    '',
+    '- O "Pedir ajuste" do painel chega a você como mensagem, com o pedido original: reescreva e mande um pedido novo.',
+    `- Estado do projeto (pedidos e galeria): \`curl -s 'localhost:4747/api/studio?project=${p.slug}'\`.`,
+    '',
+  ].join('\n');
+}
+
+/** Escreve o CLAUDE.md de cada projeto (cria a pasta). Não toca num CLAUDE.md escrito à mão (sem a marca). Nunca lança. */
+export function writeProjectGuides(root: string, projects: unknown): void {
+  if (!Array.isArray(projects)) return;
+  for (const raw of projects) {
+    const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : undefined;
+    const slug = typeof r?.slug === 'string' ? r.slug : '';
+    if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(slug)) continue;
+    const str = (k: string) => (typeof r?.[k] === 'string' && (r[k] as string).trim() ? (r[k] as string).trim() : undefined);
+    const text = projectGuide({ slug, name: str('name') ?? slug, description: str('description'), style: str('style') });
+    const file = join(root, slug, 'CLAUDE.md');
+    try {
+      const old = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+      if (old === text || (old !== undefined && !old.startsWith(GUIDE_MARK))) continue;
+      mkdirSync(join(root, slug), { recursive: true });
+      writeFileSync(file, text);
+    } catch {
+      // pasta sem permissão: a agente só não terá o guia
+    }
+  }
+}
+
 /** Pasta de cópia das imagens (HABBLAUD_STUDIO_MIRROR, com ~ do usuário), ou undefined. */
 export function studioMirror(env: NodeJS.ProcessEnv = process.env): string | undefined {
   const raw = env.HABBLAUD_STUDIO_MIRROR?.trim();

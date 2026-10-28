@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { codexInstruction, createCodexImageGenerator, higgsfieldJobOf, mirrorImage, studioMirror, imageBaseName, parseStudioRequest, projectSlug } from './generate';
+import { codexInstruction, createCodexImageGenerator, higgsfieldJobOf, mirrorImage, projectGuide, studioMirror, writeProjectGuides, imageBaseName, parseStudioRequest, projectSlug } from './generate';
 import { listGallery, readGalleryFile, StudioService } from './studio';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'estudio-'));
@@ -297,5 +297,29 @@ describe('cópia no espelho (Google Drive)', () => {
   it('a pasta vem de HABBLAUD_STUDIO_MIRROR (com ~)', () => {
     expect(studioMirror({ HABBLAUD_STUDIO_MIRROR: '~/Drive/Estúdio', HOME: '/u' })).toBe('/u/Drive/Estúdio');
     expect(studioMirror({})).toBeUndefined();
+  });
+});
+
+describe('agente do projeto (CLAUDE.md da pasta)', () => {
+  it('escreve o guia com o estilo e o comando do pedido; não mexe num CLAUDE.md escrito à mão', () => {
+    const root = tmp();
+    writeProjectGuides(root, [{ slug: 'funko', name: 'Bases Funko', style: 'terracota fosco' }, { slug: '../fora', name: 'x' }]);
+    const text = readFileSync(join(root, 'funko/CLAUDE.md'), 'utf8');
+    expect(text).toContain('# Projeto do Estúdio: Bases Funko');
+    expect(text).toContain('> terracota fosco');
+    expect(text).toContain('"project":"funko"');
+    expect(existsSync(join(root, '../fora/CLAUDE.md'))).toBe(false);
+    writeProjectGuides(root, [{ slug: 'funko', name: 'Bases Funko', style: 'verde' }]);
+    expect(readFileSync(join(root, 'funko/CLAUDE.md'), 'utf8')).toContain('> verde');
+    writeFileSync(join(root, 'funko/CLAUDE.md'), 'meu guia');
+    writeProjectGuides(root, [{ slug: 'funko', name: 'Bases Funko', style: 'azul' }]);
+    expect(readFileSync(join(root, 'funko/CLAUDE.md'), 'utf8')).toBe('meu guia');
+    expect(projectGuide({ slug: 'p', name: 'P' })).toContain('Sem guia de estilo');
+  });
+
+  it('cada projeto informa a pasta como o host a vê', () => {
+    const studio = new StudioService({ root: tmp(), hostRoot: '/Users/b/estudio/' });
+    studio.saveProject({ name: 'Bases Funko' });
+    expect(studio.projects()[0].folder).toBe('/Users/b/estudio/bases-funko');
   });
 });

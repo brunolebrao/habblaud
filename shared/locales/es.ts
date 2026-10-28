@@ -3458,4 +3458,6 @@ export const ES: Readonly<Record<string, string>> = {
   "Mês": "Mes",
   "Só para ver: gerar, aprovar e editar imagens pelo próprio computador (https://habblaud.localhost).": "Solo para ver: generar, aprobar y editar imágenes desde el propio ordenador (https://habblaud.localhost).",
   "Estúdio: cada imagem também é copiada para {0}": "Estudio: cada imagen también se copia a {0}",
+  "Falar com {0}": "Hablar con {0}",
+  "Abrir agente do projeto": "Abrir agente del proyecto",
 };

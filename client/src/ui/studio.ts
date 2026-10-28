@@ -53,6 +53,8 @@ export interface StudioProjectView {
   cover?: string;
   pending: number;
   updatedAt: number;
+  /** Pasta do projeto no computador: onde a agente do projeto trabalha (com o CLAUDE.md do projeto). */
+  folder?: string;
 }
 
 export interface StudioState {
@@ -356,6 +358,32 @@ export class Studio implements UiComponent {
 
   // ------------------------------------------------------------ dentro de um projeto
 
+  /**
+   * A agente do projeto: quem está na sala da pasta do projeto ("Falar com {nome}" abre o painel dela) ou, sem
+   * ninguém, "Abrir agente do projeto" (o Novo agente já com a pasta, que tem o CLAUDE.md do projeto).
+   */
+  private agentButton(p: StudioProjectView): HTMLElement[] {
+    const folder = p.folder;
+    const snap = this.ctx.store.snapshot;
+    if (!folder || !snap) return [];
+    const room = snap.rooms.find((r) => r.path === folder);
+    const agent = room && snap.agents.find((a) => a.roomId === room.id && !a.parentId);
+    if (agent) {
+      return [
+        h('button', {
+          class: 'ui-btn ui-btn--sm',
+          type: 'button',
+          text: tr('Falar com {0}', [agent.name]),
+          on: { click: () => (this.hide(), this.ctx.select({ type: 'agent', id: agent.id }, { focus: true })) },
+        }),
+      ];
+    }
+    if (!this.ctx.newAgentIn || !access().spawn) return [];
+    const btn = h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text: tr('Abrir agente do projeto'), title: folder });
+    btn.addEventListener('click', () => this.ctx.newAgentIn?.(folder, btn));
+    return [btn];
+  }
+
   private projectView(p: StudioProjectView): HTMLElement[] {
     const s = this.state;
     const info = h(
@@ -365,6 +393,7 @@ export class Studio implements UiComponent {
       h('p', { class: 'ui-studio__style', text: p.style ? tr('Estilo: {0}', [p.style]) : tr('Sem guia de estilo: os prompts vão como estão.') }),
     );
     const edit = h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text: tr('Editar projeto') });
+    const agentBtn = this.agentButton(p);
     const editForm = this.projectForm(p, () => {
       setHidden(editForm, true);
       setHidden(info, false);
@@ -454,8 +483,8 @@ export class Studio implements UiComponent {
     const grid = h('div', { class: 'ui-studio__grid' }, ...s.items.map((i) => this.card(i)));
     const empty = s.items.length ? [] : [h('p', { class: 'ui-studio__empty', text: tr('Nenhuma imagem neste projeto ainda.') })];
     const hint = h('p', { class: 'ui-studio__hint', text: tr('Agentes pedem imagens com POST /api/studio {project: "{0}", title, prompt, requestedBy, session}; o pedido espera você aqui.', [p.slug]) });
-    if (this.readOnly) return [info, h('h3', { class: 'ui-studio__h', text: tr('Galeria') }), ...empty, grid];
-    return [info, edit, editForm, ...pendingSec, form, jobs, h('h3', { class: 'ui-studio__h', text: tr('Galeria') }), ...empty, grid, hint];
+    if (this.readOnly) return [info, ...agentBtn, h('h3', { class: 'ui-studio__h', text: tr('Galeria') }), ...empty, grid];
+    return [info, h('div', { class: 'ui-studio__actions' }, edit, ...agentBtn), editForm, ...pendingSec, form, jobs, h('h3', { class: 'ui-studio__h', text: tr('Galeria') }), ...empty, grid, hint];
   }
 
   private pendingCard(j: StudioJobView): HTMLElement {

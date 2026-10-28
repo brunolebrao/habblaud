@@ -640,7 +640,10 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
         sendJson(res, 403, { error: denied(req, tr('só o auxiliar do próprio computador')) });
       } else if (path === '/api/host/studio/poll') {
         req.resume();
-        hostWait(res, url, (ms, signal) => studio.pollWait(ms, signal)).then((list) => list && sendJson(res, 200, { jobs: list }), (err) => fail(res, err));
+        hostWait(res, url, (ms, signal) => studio.pollWait(ms, signal)).then(
+          (list) => list && sendJson(res, 200, { jobs: list, projects: studio.projects().map(({ slug, name, description, style }) => ({ slug, name, description, style })) }),
+          (err) => fail(res, err),
+        );
       } else {
         readJson(req, 64 * 1024)
           .then((body) => {

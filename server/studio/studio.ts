@@ -70,6 +70,8 @@ export interface StudioProjectInfo extends StudioProject {
   /** Imagem mais recente (capa do cartão). */
   cover?: string;
   pending: number;
+  /** Pasta do projeto como o host a vê (<raiz no host>/<slug>): onde a agente do projeto trabalha. */
+  folder: string;
 }
 
 export interface StudioItem {
@@ -86,6 +88,8 @@ export interface StudioItem {
 
 export interface StudioServiceOptions {
   root: string;
+  /** A raiz como o host a vê (no Docker, HABBLAUD_STUDIO_HOST_DIR); ausente = `root`. */
+  hostRoot?: string;
   /** Onde guardar projetos e pedidos esperando (studio.json); ausente = só na memória. */
   stateFile?: string;
   /** Modo Node com o Codex: gera aqui. Ausente: fila para o auxiliar do host. */
@@ -221,7 +225,8 @@ export class StudioService {
       .map((slug) => {
         const p = this.projectsBySlug.get(slug) ?? { slug, name: slug, updatedAt: 0 };
         const mine = items.filter((i) => i.project === slug);
-        return { ...p, count: mine.length, cover: mine[0]?.file, pending: pending.filter((j) => j.project === slug).length, updatedAt: Math.max(p.updatedAt, mine[0]?.at ?? 0) };
+        const folder = `${(this.opts.hostRoot ?? this.opts.root).replace(/\/+$/, '')}/${slug}`;
+        return { ...p, count: mine.length, cover: mine[0]?.file, pending: pending.filter((j) => j.project === slug).length, folder, updatedAt: Math.max(p.updatedAt, mine[0]?.at ?? 0) };
       })
       .sort((a, b) => b.pending - a.pending || b.updatedAt - a.updatedAt);
   }

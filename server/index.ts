@@ -297,6 +297,7 @@ const studioCodex = config.studio && !config.inDocker ? findCodexBin(process.env
 const studio = config.studio
   ? new StudioService({
       root: config.studioDir,
+      hostRoot: process.env.HABBLAUD_STUDIO_HOST_DIR?.trim() || undefined,
       stateFile: join(config.dataDir, 'studio.json'),
       generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir, mirror: studioMirror(process.env) }) : undefined,
       agentName: (session) => office.list().find((a) => a.sessionId === session && !a.id.startsWith(`${session}:`))?.name,

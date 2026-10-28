@@ -11617,6 +11617,12 @@ a.ui-link__badge:hover {
 .ui-studio__info + .ui-btn {
   margin: 0 14px 10px;
 }
+.ui-studio__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 14px 10px;
+}
 .ui-studio__h {
   margin: 12px 14px 6px;
   font-size: 13px;

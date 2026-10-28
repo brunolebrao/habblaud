@@ -26,7 +26,7 @@ import { createCliRunner, createOpener, folderProblem, launch, parseSpawn, type 
 import { runnableClaudeBin } from '../server/claude-bin';
 import { ATTACHMENT_MAX_BYTES, ATTACHMENTS_PER_SPAWN, attachmentsRoot, promptWithAttachments, safeFileName, writeAttachments, type Attachment } from '../server/spawn/attachments';
 import { createWhisperTranscriber, findWhisper, type Transcriber } from '../server/dictation/whisper';
-import { COMPOSED_PROMPT_MAX, createCodexImageGenerator, parseStudioRequest, studioMirror, studioRoot, type StudioGenerator } from '../server/studio/generate';
+import { COMPOSED_PROMPT_MAX, createCodexImageGenerator, parseStudioRequest, studioMirror, studioRoot, writeProjectGuides, type StudioGenerator } from '../server/studio/generate';
 import { checkFile, insideKnownFolder, tempRoots } from '../server/deliveries/files';
 import { discoverClaudeDirs } from '../server/accounts/detect';
 import { HOST_WAIT_MS } from '../server/host-wait';
@@ -290,11 +290,18 @@ export async function dictationRound(post: Post, transcribe: Transcriber, log: (
  * ela fica pronta. A rodada não espera a geração (1 a 3 min): continua buscando, o que mantém o auxiliar presente e
  * pega os pedidos seguintes (o servidor limita a 3 de uma vez). O prompt nunca vai para a tela. Nunca lança.
  */
-export async function studioRound(post: Post, generate: StudioGenerator, log: (line: string) => void = () => {}, opts: { wait?: boolean } = {}): Promise<RoundResult & { running?: Promise<void>[] }> {
+export async function studioRound(
+  post: Post,
+  generate: StudioGenerator,
+  log: (line: string) => void = () => {},
+  opts: { wait?: boolean; guides?: (projects: unknown) => void } = {},
+): Promise<RoundResult & { running?: Promise<void>[] }> {
   const polled = await post(`/api/host/studio/poll${opts.wait ? '?wait=1' : ''}`, {});
   if (!polled) return { state: 'down' };
   const list = rec(polled.json)?.jobs;
   if (polled.status !== 200 || !Array.isArray(list)) return { state: 'refused', status: polled.status };
+  // O CLAUDE.md de cada projeto (o guia da agente do projeto), refeito quando o projeto muda no painel.
+  opts.guides?.(rec(polled.json)?.projects);
   const results: Array<BridgeResult & { file?: string }> = [];
   const running: Promise<void>[] = [];
   for (const raw of list) {
@@ -416,7 +423,7 @@ async function main(): Promise<void> {
       const mirror = studioMirror(process.env);
       if (mirror) log(tr('Estúdio: cada imagem também é copiada para {0}', [mirror]));
       const generate = createCodexImageGenerator({ codexBin: bin, root: studioRoot(process.env), mirror });
-      void waitLoop(() => studioRound(waitPost, generate, log, { wait: true }));
+      void waitLoop(() => studioRound(waitPost, generate, log, { wait: true, guides: (projects) => writeProjectGuides(studioRoot(process.env), projects) }));
     }
   }
   let last = '';
