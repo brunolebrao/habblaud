@@ -3303,4 +3303,5 @@ export const EN: Readonly<Record<string, string>> = {
   "Plano (só planeja)": "Plan (only plans)",
   "escolher o modo da sessão exige poder aprovar permissões por aqui": "choosing the session mode requires being allowed to approve permissions from here",
   "brand.json: \"art\" precisa ser um destes: {0}": "brand.json: \"art\" must be one of: {0}",
+  "Copiar o endereço": "Copy the address",
 };

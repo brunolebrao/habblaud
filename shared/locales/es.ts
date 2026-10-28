@@ -3304,4 +3304,5 @@ export const ES: Readonly<Record<string, string>> = {
   "Plano (só planeja)": "Plan (solo planifica)",
   "escolher o modo da sessão exige poder aprovar permissões por aqui": "elegir el modo de la sesión exige poder aprobar permisos desde aquí",
   "brand.json: \"art\" precisa ser um destes: {0}": "brand.json: \"art\" debe ser uno de estos: {0}",
+  "Copiar o endereço": "Copiar la dirección",
 };
