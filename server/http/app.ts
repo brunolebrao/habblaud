@@ -411,7 +411,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
           messages: !!deps.messages && trusted(req, 'messages'),
           terminal: !!terminals && trusted(req, 'terminal'),
           spawn: !!deps.spawn && trusted(req, 'spawn'),
-          ...(deps.studio ? { studio: trusted(req), studioView: trusted(req) || remote } : {}),
+          ...(deps.studio ? { studio: trusted(req, 'studio'), studioView: trusted(req, 'studio') || remote } : {}),
           world: !!deps.world && !!deps.terminal && !remote && isLoopbackHost(req.headers.host),
         };
         sendJson(res, 200, access);
@@ -572,7 +572,8 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       return true;
     }
     if (path === '/api/studio' || path.startsWith('/api/studio/')) {
-      // O Estúdio roda o Codex sem sandbox (studio/generate.ts): só pelo próprio computador, nunca pela porta remota.
+      // O Estúdio roda o Codex sem sandbox (studio/generate.ts): pelo próprio computador ou, com `studio` em
+      // HABBLAUD_REMOTE_ALLOW, pela porta remota (com login).
       // Agentes só PEDEM (o pedido fica esperando); gerar direto, aprovar, descartar e mexer nos projetos só pelo painel
       // (pedido do próprio navegador, mesma origem: Sec-Fetch-Site same-origin).
       const studio = deps.studio;
@@ -580,10 +581,10 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       const job = /^\/api\/studio\/jobs\/([^/]+)(?:\/(approve|discard|retry|revise))?$/.exec(path);
       const reply = (r: StudioSubmit, created = false) =>
         'job' in r ? sendJson(res, created ? 201 : 200, r.job) : sendJson(res, r.error === 'invalid' ? 400 : r.error === 'too-many' ? 429 : r.error === 'unknown' ? 404 : 409, { error: r.reason });
-      // Pelo acesso remoto (já passou pelo login): só VER a galeria (projetos, imagens e prompts), nunca gerar ou aprovar.
-      const viewOnly = !trusted(req) && isRemote(req) && isRead && (path === '/api/studio' || path === '/api/studio/projects' || path.startsWith('/api/studio/file/'));
+      // Pelo acesso remoto (já passou pelo login), sem `studio` em HABBLAUD_REMOTE_ALLOW: só VER a galeria (projetos, imagens e prompts), nunca gerar ou aprovar.
+      const viewOnly = !trusted(req, 'studio') && isRemote(req) && isRead && (path === '/api/studio' || path === '/api/studio/projects' || path.startsWith('/api/studio/file/'));
       if (!studio) sendJson(res, 403, { error: tr('Estúdio desligado (HABBLAUD_STUDIO=1)') });
-      else if (!trusted(req) && !viewOnly) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
+      else if (!trusted(req, 'studio') && !viewOnly) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
       else if (path === '/api/studio' && isRead) {
         const project = url.searchParams.get('project') ?? undefined;
         if (viewOnly) sendJson(res, 200, { available: false, readOnly: true, projects: studio.projects().map((p) => ({ ...p, pending: 0 })), jobs: [], items: studio.gallery(project) });

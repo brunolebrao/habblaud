@@ -668,4 +668,17 @@ describe('Estúdio pela porta remota', () => {
     expect((await request(s.remoteBase, '/api/studio')).status).not.toBe(200);
     root.cleanup();
   });
+
+  it('com studio em HABBLAUD_REMOTE_ALLOW: logado, gera e mexe em projetos pelo painel', async () => {
+    const root = tempDir();
+    const studio = new StudioService({ root: root.dir });
+    const s = await start(['permissions', 'studio'], { studio });
+    const cookie = await login(s.remoteBase);
+    const headers = { Cookie: cookie, Origin: s.remoteBase, 'Sec-Fetch-Site': 'same-origin', 'X-Habblaud-Studio': 'panel' };
+    expect(JSON.parse((await request(s.remoteBase, '/api/access', { headers })).body)).toMatchObject({ studio: true, studioView: true });
+    const r = await request(s.remoteBase, '/api/studio/projects', { method: 'POST', headers, body: { name: 'Funkos' } });
+    expect(r.status).toBe(200);
+    expect(JSON.parse((await request(s.remoteBase, '/api/studio', { headers })).body).readOnly).toBeUndefined();
+    root.cleanup();
+  });
 });
