@@ -114,7 +114,8 @@ export class PeerLink {
       port: this.base.port || (secure ? 443 : 80),
       path,
       headers,
-      ...(secure ? { ca: this.config.ca, rejectUnauthorized: true, checkServerIdentity: () => undefined } : {}),
+      // O nome no certificado só deixa de ser conferido com a CA de lá fixada (parsePeers exige "ca" em https).
+      ...(secure ? { ca: this.config.ca, rejectUnauthorized: true, ...(this.config.ca ? { checkServerIdentity: () => undefined } : {}) } : {}),
     };
     return new Promise((ok, fail) => {
       const req = (secure ? https : http).request(opts, ok);

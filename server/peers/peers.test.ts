@@ -40,7 +40,8 @@ function remoteSnapshot(): OfficeSnapshot {
   };
 }
 
-const PEERS = { self: 'Mac Studio', peers: [{ id: 'mac2', name: 'MacBook', url: 'https://192.168.0.176:4748', user: 'central', password: 'x' }] };
+const CA = '-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----';
+const PEERS = { self: 'Mac Studio', peers: [{ id: 'mac2', name: 'MacBook', url: 'https://192.168.0.176:4748', user: 'central', password: 'x', ca: CA }] };
 
 describe('ids de outros computadores (shared/hosts.ts)', () => {
   it('prefixa e separa', () => {
@@ -73,13 +74,14 @@ describe('peers.json', () => {
         { id: 'Mac 3', url: 'https://x', user: 'a', password: 'b' },
         { id: 'mac2', url: 'https://y', user: 'a', password: 'b' },
         { id: 'win', url: 'ftp://x', user: 'a', password: 'b' },
-        { id: 'pc', url: 'https://10.0.0.2:4748/qualquer', user: 'a' },
+        { id: 'pc', url: 'https://10.0.0.2:4748/qualquer', user: 'a', ca: CA },
+        { id: 'sem-ca', url: 'https://10.0.0.3:4748', user: 'a', password: 'b' },
       ],
     });
     expect(r.file.self).toBe('Mac Studio');
     expect(r.file.peers).toHaveLength(1);
     expect(r.file.peers[0]).toMatchObject({ id: 'mac2', name: 'MacBook', url: 'https://192.168.0.176:4748' });
-    expect(r.warnings).toHaveLength(4);
+    expect(r.warnings).toHaveLength(5);
     expect(parsePeers([]).warnings).toHaveLength(1);
   });
 });
