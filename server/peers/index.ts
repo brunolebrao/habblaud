@@ -18,6 +18,11 @@ const ATTACHMENT_BODY = 21 * 1024 * 1024;
 /** O que as rotas encaminhadas usam do handler da API (http/app.ts). */
 export interface PeerRouteHelpers {
   trusted(req: IncomingMessage, feature?: RemoteFeature): boolean;
+  /**
+   * O recurso está ligado AQUI (mesma chave das rotas locais: terminal, mensagens e permissões só existem com bind local).
+   * Desligado = a central não encaminha, nem com Host local (o Host se imita quando a porta está aberta à rede).
+   */
+  enabled(feature: RemoteFeature): boolean;
   denied(req: IncomingMessage, localMessage: string): string;
   readJson(req: IncomingMessage, max?: number): Promise<unknown>;
   sendJson(res: ServerResponse, status: number, body: unknown): void;
@@ -142,7 +147,8 @@ export class PeerSet {
       h.sendJson(res, status, { error });
       return true;
     };
-    const guard = (feature: RemoteFeature, localMessage: string) => (h.trusted(req, feature) ? null : fail(403, h.denied(req, localMessage)));
+    const guard = (feature: RemoteFeature, localMessage: string) =>
+      !h.enabled(feature) ? fail(403, tr('recurso desligado neste computador')) : h.trusted(req, feature) ? null : fail(403, h.denied(req, localMessage));
     const run = (p: Promise<void>) => {
       p.catch((err: Error) => {
         if (!res.headersSent) h.sendJson(res, 502, { error: tr('outro computador: {0}', [err.message]) });
@@ -316,6 +322,7 @@ export class PeerSet {
         }
         const link = this.link(host);
         if (!link) return h.sendJson(res, 404, { error: tr('outro computador desconhecido') });
+        if (feature && !h.enabled(feature)) return h.sendJson(res, 403, { error: tr('recurso desligado neste computador') });
         if (feature && !h.trusted(req, feature)) return h.sendJson(res, 403, { error: h.denied(req, localMessage) });
         await act(link, body);
       })
@@ -334,7 +341,15 @@ export class PeerSet {
     const up = await link.open(path);
     if (up.statusCode !== 200) {
       const chunks: Buffer[] = [];
-      for await (const c of up) chunks.push(c as Buffer);
+      let size = 0;
+      for await (const c of up) {
+        size += (c as Buffer).length;
+        if (size > 64 * 1024) {
+          up.destroy();
+          break;
+        }
+        chunks.push(c as Buffer);
+      }
       let body: unknown;
       try {
         body = JSON.parse(Buffer.concat(chunks).toString('utf8'));

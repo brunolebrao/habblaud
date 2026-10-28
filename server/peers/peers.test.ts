@@ -137,3 +137,47 @@ describe('PeerSet', () => {
     expect(office.list().some((a) => a.id.startsWith('@'))).toBe(false);
   });
 });
+
+describe('PeerSet.route: travas', () => {
+  const setup = (enabled: boolean) => {
+    const set = new PeerSet(parsePeers(PEERS).file);
+    set.links[0].state = 'online';
+    const forwarded: string[] = [];
+    set.links[0].request = async (method, path) => {
+      forwarded.push(`${method} ${path}`);
+      return { status: 200, headers: {}, body: Buffer.from('{}') };
+    };
+    const sent: Array<{ status: number; body: unknown }> = [];
+    const helpers = {
+      trusted: () => true,
+      enabled: () => enabled,
+      denied: (_r: unknown, m: string) => m,
+      readJson: async () => ({ agentId: '@mac2:.claude:42', text: 'oi' }),
+      sendJson: (_res: unknown, status: number, body: unknown) => void sent.push({ status, body }),
+    };
+    const req = (method: string, url: string) => ({ method, url, headers: {}, resume() {} }) as never;
+    return { set, forwarded, sent, helpers, req };
+  };
+
+  it('recurso desligado aqui: não encaminha (nem terminal, nem permissão, nem mensagem)', async () => {
+    const { set, forwarded, sent, helpers, req } = setup(false);
+    for (const [m, u] of [
+      ['GET', '/api/agents/%40mac2%3A.claude%3A42/terminal'],
+      ['POST', '/api/permissions/%40mac2%3Ap-1/decision'],
+      ['POST', '/api/messages'],
+    ]) {
+      expect(set.route(req(m, u), {} as never, new URL(`http://localhost${u}`), helpers)).toBe(true);
+    }
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(forwarded).toEqual([]);
+    expect(sent.map((s) => s.status)).toEqual([403, 403, 403]);
+  });
+
+  it('recurso ligado: encaminha a mensagem sem o prefixo', async () => {
+    const { set, forwarded, sent, helpers, req } = setup(true);
+    set.route(req('POST', '/api/messages'), {} as never, new URL('http://localhost/api/messages'), helpers);
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(forwarded).toEqual(['POST /api/messages']);
+    expect(sent[0].status).toBe(200);
+  });
+});

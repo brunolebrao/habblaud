@@ -3341,4 +3341,5 @@ export const EN: Readonly<Record<string, string>> = {
   "certificado não confere com a CA do peers.json": "certificate does not match the CA in peers.json",
   "Outros computadores: monta {0} em {1}, somente leitura.": "Other computers: mounts {0} at {1}, read-only.",
   "falta \"ca\" (a CA de lá, em ~/.habblaud/remote-tls/server/ca.crt)": "\"ca\" is missing (the CA from there, in ~/.habblaud/remote-tls/server/ca.crt)",
+  "recurso desligado neste computador": "feature turned off on this computer",
 };

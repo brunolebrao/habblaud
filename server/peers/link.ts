@@ -166,6 +166,8 @@ export class PeerLink {
     res.on('data', (chunk: string) => {
       this.alive();
       buf += chunk;
+      // Linha sem fim (ou evento enorme) não cresce sem limite.
+      if (buf.length + size > MAX_EVENT) return void res.destroy(new Error(tr('evento grande demais')));
       let nl: number;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl).replace(/\r$/, '');

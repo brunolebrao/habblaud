@@ -279,6 +279,10 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
   const denied = (req: IncomingMessage, localMessage: string): string =>
     isRemote(req) ? tr('não liberado no acesso remoto (veja HABBLAUD_REMOTE_ALLOW)') : localMessage;
 
+  // Encaminhar a outro computador (server/peers/) exige o recurso ligado aqui, com a mesma chave das rotas locais.
+  const peerFeatureOn = (feature: RemoteFeature): boolean =>
+    feature === 'terminal' ? !!terminals : feature === 'permissions' ? !!deps.permissions : feature === 'messages' ? !!deps.messages : !!deps.terminal;
+
   const methodNotAllowed = (res: ServerResponse, allow: string) => {
     res.setHeader('Allow', allow);
     sendJson(res, 405, { error: tr('método não permitido') });
@@ -355,7 +359,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       } else deps.world(req, res, url);
       return true;
     }
-    if (deps.peers?.route(req, res, url, { trusted, denied, readJson, sendJson })) return true;
+    if (deps.peers?.route(req, res, url, { trusted, denied, readJson, sendJson, enabled: peerFeatureOn })) return true;
     if (path === '/api/stream') {
       if (method !== 'GET') methodNotAllowed(res, 'GET');
       else hub.attach(req, res);
