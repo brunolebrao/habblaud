@@ -65,6 +65,10 @@ export interface ServerConfig {
   fixedRooms: string[];
   /** Pasta da marca própria (server/brand.ts): HABBLAUD_BRAND_DIR ou <dataDir>/brand. */
   brandDir: string;
+  /** Estúdio de imagens com o Codex (studio/; opcional): HABBLAUD_STUDIO=1. */
+  studio: boolean;
+  /** Raiz do Estúdio: HABBLAUD_STUDIO_DIR ou ~/estudio (no Docker, a pasta do host montada pelo docker-up). */
+  studioDir: string;
   /** Segunda porta, com login, para o celular na rede local (http/remote.ts); ausente = desligada. */
   remote?: RemoteConfig;
   /** Por que o acesso remoto ficou desligado quando as variáveis estão incompletas. */
@@ -266,6 +270,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
     hiddenDirs: parseHiddenDirs(env.HABBLAUD_IGNORE_DIRS, home),
     fixedRooms: parseDirList(env.HABBLAUD_FIXED_ROOMS, home),
     brandDir: resolve(env.HABBLAUD_BRAND_DIR?.trim() || join(dataDir, 'brand')),
+    studio: isTruthy(env.HABBLAUD_STUDIO ?? ''),
+    studioDir: resolve(env.HABBLAUD_STUDIO_DIR?.trim() || join(home, 'estudio')),
     remote: remote.config,
     remoteWarning: remote.warning,
     world: parseWorldConfig(env, argv),

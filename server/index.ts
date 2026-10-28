@@ -49,6 +49,8 @@ import { AttachmentStore, attachmentsRoot, writeAttachments } from './spawn/atta
 import { recentFolders } from './spawn/folders';
 import { isDemoId } from '../shared/timeline';
 import { DictationService } from './dictation/dictation';
+import { StudioService } from './studio/studio';
+import { createCodexImageGenerator } from './studio/generate';
 import { createWhisperTranscriber, findWhisper } from './dictation/whisper';
 import { DeliveryIndex } from './deliveries/deliveries';
 import { FileFetcher } from './deliveries/fetcher';
@@ -283,6 +285,11 @@ const spawnBin = config.inDocker ? undefined : runnableClaudeBin(process.env);
 const spawn = spawnOn
   ? new SpawnService(config.inDocker ? { attachments } : { opener: createOpener(), cli: spawnBin ? createCliRunner(spawnBin) : undefined, attachments })
   : undefined;
+// Estúdio (opcional): no Docker quem gera é o auxiliar do host; no Node, o servidor, se achar o Codex.
+const studioCodex = config.studio && !config.inDocker ? findCodexBin(process.env) : undefined;
+const studio = config.studio
+  ? new StudioService({ root: config.studioDir, generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir }) : undefined })
+  : undefined;
 // Ditado: no Docker quem transcreve é o auxiliar do host; no Node, o servidor, se achar o Whisper local.
 const whisper = config.messages && !config.inDocker ? findWhisper() : undefined;
 const dictation = config.messages
@@ -385,6 +392,7 @@ const api = createApiHandler({
   spawn,
   attachments,
   dictation,
+  studio,
   deliveries,
   files: deliveryFiles,
   spawnFolders: async () => {
@@ -544,6 +552,15 @@ server.listen(config.port, config.host, () => {
   );
   log.info(timeline ? tr('   Linha do tempo (timelapse): gravando em {0}.', [timelineDir]) : tr('   Linha do tempo (timelapse): gravação desligada (HABBLAUD_TIMELINE).'));
   log.info(tr('   Responder pelo escritório: {0}.', [config.terminal ? tr('ligado (precisa do mod: npm run mod:install; ou do hook antigo: npm run hooks:install)') : tr('desligado (mesma trava do terminal)')]));
+  if (config.studio) {
+    log.info(
+      config.inDocker
+        ? tr('   Estúdio: ligado em {0}; quem gera é o auxiliar do host (npm run codex:bridge).', [config.studioDir])
+        : studioCodex
+          ? tr('   Estúdio: ligado em {0} (Codex: {1}).', [config.studioDir, studioCodex])
+          : tr('   Estúdio: sem o Codex (codex no PATH ou HABBLAUD_CODEX_BIN); só a galeria de {0}.', [config.studioDir]),
+    );
+  }
   log.info(
     config.messages
       ? tr('   Mensagens pelo escritório: ligadas (precisa do plugin habblaud-mensagens: npm run mod:install).')

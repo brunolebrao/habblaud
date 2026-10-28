@@ -11209,3 +11209,114 @@ html.is-replay #world {
     inset 0 0 0 1px rgba(232, 163, 90, 0.18),
     inset 0 1px 0 rgba(255, 228, 180, 0.06);
 }
+
+/* Estúdio (studio.ts): pedido de imagem e galeria. */
+@media (min-width: 721px) {
+  .ui-studio {
+    width: 520px;
+  }
+}
+.ui-studio__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 14px 10px;
+}
+.ui-studio__prompt {
+  resize: vertical;
+  min-height: 84px;
+}
+.ui-studio__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ui-studio__status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-faint);
+}
+.ui-studio__jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 14px 10px;
+  padding: 0;
+  list-style: none;
+}
+.ui-studio__jobs:empty {
+  display: none;
+}
+.ui-studio__job {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--ui-line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.ui-studio__job.is-failed {
+  border-color: var(--ui-danger, #e06c6c);
+}
+.ui-studio__job-state {
+  color: var(--ui-accent);
+}
+.ui-studio__job-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ui-studio__job-error {
+  grid-column: 1 / -1;
+  color: var(--ui-muted);
+}
+.ui-studio__job-at {
+  color: var(--ui-faint);
+}
+.ui-studio__empty {
+  margin: 18px 14px;
+  color: var(--ui-muted);
+  font-size: 13px;
+}
+.ui-studio__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  padding: 0 14px 14px;
+}
+.ui-studio__item {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ui-studio__thumb {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-bg-solid);
+}
+.ui-studio__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ui-studio__item figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ui-faint);
+}
+.ui-studio__meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

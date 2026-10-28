@@ -19,6 +19,7 @@ import type { SpawnService } from '../spawn/spawn';
 import { ATTACHMENT_BODY_MAX, parseAttachment, type AttachmentStore } from '../spawn/attachments';
 import type { SpawnFolder } from '../spawn/folders';
 import { AUDIO_BODY_MAX, type DictationService } from '../dictation/dictation';
+import type { StudioService } from '../studio/studio';
 import type { DeliveryIndex } from '../deliveries/deliveries';
 import type { FileFetcher } from '../deliveries/fetcher';
 import { HOST_WAIT_MS } from '../host-wait';
@@ -71,6 +72,8 @@ export interface ApiDeps {
   attachments?: AttachmentStore;
   /** Ditado (/api/dictation e, para o auxiliar do host, /api/host/dictation/*; dictation/dictation.ts). */
   dictation?: DictationService;
+  /** Estúdio de imagens (/api/studio e, para o auxiliar do host, /api/host/studio/*; studio/studio.ts). */
+  studio?: StudioService;
   /** Entregas (GET /api/deliveries e os anexos em /api/deliveries/file/:id; deliveries/deliveries.ts). */
   deliveries?: DeliveryIndex;
   /** Quem lê os arquivos das entregas (e, para o auxiliar do host, /api/host/files/*; deliveries/fetcher.ts). */
@@ -398,6 +401,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
           messages: !!deps.messages && trusted(req, 'messages'),
           terminal: !!terminals && trusted(req, 'terminal'),
           spawn: !!deps.spawn && trusted(req, 'spawn'),
+          ...(deps.studio ? { studio: trusted(req, 'spawn') } : {}),
           world: !!deps.world && !!deps.terminal && !remote && isLoopbackHost(req.headers.host),
         };
         sendJson(res, 200, access);
@@ -555,6 +559,57 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
         if (info) sendJson(res, 200, info);
         else sendJson(res, 404, { error: tr('ditado desconhecido') });
       } else methodNotAllowed(res, path === '/api/dictation' ? 'GET, POST' : 'GET');
+      return true;
+    }
+    if (path === '/api/studio' || path.startsWith('/api/studio/')) {
+      // O Estúdio roda o Codex (studio/generate.ts) e mostra arquivos do computador: a trava do "Novo agente".
+      const studio = deps.studio;
+      if (!studio) sendJson(res, 403, { error: tr('Estúdio desligado (HABBLAUD_STUDIO=1)') });
+      else if (!trusted(req, 'spawn')) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
+      else if (path === '/api/studio' && isRead) sendJson(res, 200, { available: studio.available(), jobs: studio.jobs(), items: studio.gallery() });
+      else if (path === '/api/studio' && method === 'POST') {
+        readJson(req, 64 * 1024)
+          .then((body) => {
+            const r = studio.submit(body);
+            if ('job' in r) return sendJson(res, 201, r.job);
+            sendJson(res, r.error === 'invalid' ? 400 : r.error === 'too-many' ? 429 : 409, { error: r.reason });
+          })
+          .catch((err) => fail(res, err));
+      } else if (path.startsWith('/api/studio/jobs/') && isRead) {
+        const job = studio.get(decodeURIComponent(path.slice('/api/studio/jobs/'.length)));
+        if (job) sendJson(res, 200, job);
+        else sendJson(res, 404, { error: tr('pedido desconhecido') });
+      } else if (path.startsWith('/api/studio/file/') && isRead) {
+        let rel = '';
+        try {
+          rel = decodeURIComponent(path.slice('/api/studio/file/'.length));
+        } catch {
+          rel = '';
+        }
+        const r = studio.file(rel);
+        if ('data' in r) sendFile(res, r.data, r.type, r.name);
+        else sendJson(res, r.status, { error: r.error });
+      } else methodNotAllowed(res, path === '/api/studio' ? 'GET, POST' : 'GET');
+      return true;
+    }
+    if (path === '/api/host/studio/poll' || path === '/api/host/studio/ack') {
+      // Só o auxiliar do host, pela porta local (nunca pela remota); fora do Docker, só pelo loopback.
+      const studio = deps.studio;
+      if (method !== 'POST') methodNotAllowed(res, 'POST');
+      else if (!studio) sendJson(res, 403, { error: tr('Estúdio desligado (HABBLAUD_STUDIO=1)') });
+      else if (!trusted(req) || (!deps.inDocker && !isLoopbackAddress(req.socket.remoteAddress))) {
+        sendJson(res, 403, { error: denied(req, tr('só o auxiliar do próprio computador')) });
+      } else if (path === '/api/host/studio/poll') {
+        req.resume();
+        hostWait(res, url, (ms, signal) => studio.pollWait(ms, signal)).then((list) => list && sendJson(res, 200, { jobs: list }), (err) => fail(res, err));
+      } else {
+        readJson(req, 64 * 1024)
+          .then((body) => {
+            studio.ack(body);
+            sendJson(res, 200, { ok: true });
+          })
+          .catch((err) => fail(res, err));
+      }
       return true;
     }
     if (path === '/api/deliveries' || path.startsWith('/api/deliveries/')) {

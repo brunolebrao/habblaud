@@ -12,6 +12,8 @@ do meio (0.**3**.0).
 
 ### Adicionado
 
+- **Estúdio de imagens** (opcional, `HABBLAUD_STUDIO=1`): botão do quadro no topo para pedir uma imagem ao Codex (projeto + prompt) e ver a galeria. Cada imagem fica em `~/estudio/<projeto>/<data>/` com o prompt (`.md`) e os metadados (`.json`). Um agente pode escrever o prompt e mandar para `POST /api/studio`. O Codex roda com `--sandbox danger-full-access` (o único modo em que ele gera imagens) numa pasta só do Estúdio, com um pedido fixo; o modelo é `gpt-6-luna` (`HABBLAUD_STUDIO_MODEL`). No Docker, quem gera é o auxiliar do host, e a galeria é montada somente leitura.
+
 - **Pacote de arte "Forja" (`"art": "forja"` no brand.json).** Opcional: `"art": "forja"` no brand.json): oficinas medievais com bancadas e impressoras 3D, cadeiras de madeira, prateleiras de filamento, tochas, barris, piso de tábuas e pedra, paredes de reboco e pedra e interface em madeira e cobre. Só local: a Visita e o Habblaud World continuam com a arte original.
 - **Esconder pastas do escritório (`HABBLAUD_IGNORE_DIRS`).** Pastas separadas por vírgula, como `~/.claude-mem`
   (onde o claude-mem roda as próprias sessões do Claude Code): as sessões nelas ou nas subpastas não viram sala nem

@@ -62,6 +62,7 @@ const CONTAINER_USAGE_DIR = '/usage';
 const CONTAINER_REMOTE_TLS_DIR = '/remote-tls';
 /** Marca própria (server/brand.ts): ~/.habblaud/brand do host, somente leitura. */
 const CONTAINER_BRAND_DIR = '/brand';
+const CONTAINER_STUDIO_DIR = '/estudio';
 /** Anexos das mensagens (server/messages/http.ts): ~/.habblaud/attachments do host, a ÚNICA montagem com escrita. */
 const CONTAINER_ATTACHMENTS_DIR = '/attachments';
 const SERVICE = 'habblaud';
@@ -325,6 +326,7 @@ export function renderOverride(
   fixedRooms: string[] = [],
   brandDir?: string,
   attachmentsDir?: string,
+  studioDir?: string,
 ): string {
   const env: Array<[string, string]> = [
     ['HABBLAUD_CLAUDE_DIRS', mounts.map((m) => m.mountDir).join(',')],
@@ -337,6 +339,7 @@ export function renderOverride(
   if (fixedRooms.length) env.push(['HABBLAUD_FIXED_ROOMS', fixedRooms.join(',')]);
   if (brandDir) env.push(['HABBLAUD_BRAND_DIR', CONTAINER_BRAND_DIR]);
   if (attachmentsDir) env.push(['HABBLAUD_ATTACHMENTS_DIR', CONTAINER_ATTACHMENTS_DIR], ['HABBLAUD_ATTACHMENTS_HOST_DIR', attachmentsDir]);
+  if (studioDir) env.push(['HABBLAUD_STUDIO_DIR', CONTAINER_STUDIO_DIR]);
   const lines = [
     `# Gerado por scripts/docker-up.ts em ${generatedAt.toISOString()} — não edite: é recriado a cada \`npm run docker:up\`.`,
     '# Contém caminhos do host e e-mails das contas: fica fora do git e com permissão 600.',
@@ -354,6 +357,8 @@ export function renderOverride(
   // Acesso remoto: SÓ a pasta do certificado do servidor (a chave da CA fica no host).
   if (remoteTlsDir) binds.push({ source: remoteTlsDir, target: CONTAINER_REMOTE_TLS_DIR });
   if (brandDir) binds.push({ source: brandDir, target: CONTAINER_BRAND_DIR });
+  // Estúdio: só a galeria, para ler (quem grava as imagens é o auxiliar do host).
+  if (studioDir) binds.push({ source: studioDir, target: CONTAINER_STUDIO_DIR });
   const writable = attachmentsDir ? [{ source: attachmentsDir, target: CONTAINER_ATTACHMENTS_DIR }] : [];
   if (binds.length || writable.length) {
     lines.push('    volumes:');
@@ -466,6 +471,19 @@ function ensureAttachmentsDir(): string | undefined {
   const dir = join(HOME, '.habblaud', 'attachments');
   try {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
+    return realpathSync(dir);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Pasta do Estúdio no host (~/estudio, criada se faltar; caminho real) quando HABBLAUD_STUDIO está ligado, ou undefined. */
+export function studioDirFor(env: NodeJS.ProcessEnv, envFile: string, home: string): string | undefined {
+  const on = 'HABBLAUD_STUDIO' in env ? env.HABBLAUD_STUDIO : readEnvValue(envFile, 'HABBLAUD_STUDIO');
+  if (!on || !/^(1|true|yes|on|sim)$/i.test(on.trim())) return undefined;
+  const dir = join(home, 'estudio');
+  try {
+    mkdirSync(dir, { recursive: true });
     return realpathSync(dir);
   } catch {
     return undefined;
@@ -763,13 +781,15 @@ async function up(opts: Options, port: number): Promise<void> {
   const fixedRooms = dirListFor('HABBLAUD_FIXED_ROOMS', process.env, envFile, HOME);
   if (fixedRooms.length) say(tr('Salas fixas: {0}.', [fixedRooms.map((d) => tildify(d)).join(', ')]));
   const brandDir = brandDirFor(HOME);
+  const studioDir = studioDirFor(process.env, envFile, HOME);
+  if (studioDir) say(tr('Estúdio: monta {0} em {1}, somente leitura (as imagens são geradas pelo auxiliar do host).', [tildify(studioDir), CONTAINER_STUDIO_DIR]));
   const attachmentsDir = ensureAttachmentsDir();
   if (attachmentsDir) say(tr('Anexos das mensagens: monta {0} em {1} (gravação só nesta pasta).', [tildify(attachmentsDir), CONTAINER_ATTACHMENTS_DIR]));
   if (brandDir) say(tr('Marca própria: monta {0} em {1}, somente leitura.', [tildify(brandDir), CONTAINER_BRAND_DIR]));
   const tmp = `${OVERRIDE_FILE}.tmp`;
   writeFileSync(
     tmp,
-    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir, attachmentsDir),
+    renderOverride(mounts, new Date(), usageDir, hostTimeZone(), codexMounts, remoteTlsDir, remotePorts, hiddenDirs, fixedRooms, brandDir, attachmentsDir, studioDir),
     { mode: 0o600 },
   );
   chmodSync(tmp, 0o600);
