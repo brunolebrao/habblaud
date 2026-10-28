@@ -12,6 +12,8 @@ do meio (0.**3**.0).
 
 ### Adicionado
 
+- **Ler em voz alta** (Configurações › Avisos, desligado por padrão): quando um agente principal termina, o escritório lê o começo da resposta; quando ele precisa de você, lê o motivo ou a pergunta com as opções. Usa a voz do sistema no idioma da interface, sem ler código nem endereços. Com o ditado do composer (Whisper local), dá para conversar com o agente só pela voz.
+
 - **Pacote de arte "Forja" (`"art": "forja"` no brand.json).** Opcional: `"art": "forja"` no brand.json): oficinas medievais com bancadas e impressoras 3D, cadeiras de madeira, prateleiras de filamento, tochas, barris, piso de tábuas e pedra, paredes de reboco e pedra e interface em madeira e cobre. Só local: a Visita e o Habblaud World continuam com a arte original.
 - **Esconder pastas do escritório (`HABBLAUD_IGNORE_DIRS`).** Pastas separadas por vírgula, como `~/.claude-mem`
   (onde o claude-mem roda as próprias sessões do Claude Code): as sessões nelas ou nas subpastas não viram sala nem

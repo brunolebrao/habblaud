@@ -3304,4 +3304,10 @@ export const ES: Readonly<Record<string, string>> = {
   "Plano (só planeja)": "Plan (solo planifica)",
   "escolher o modo da sessão exige poder aprovar permissões por aqui": "elegir el modo de la sesión exige poder aprobar permisos desde aquí",
   "brand.json: \"art\" precisa ser um destes: {0}": "brand.json: \"art\" debe ser uno de estos: {0}",
+  "{0} pergunta: {1}": "{0} pregunta: {1}",
+  "{0} precisa de você: {1}.": "{0} te necesita: {1}.",
+  "{0} terminou.": "{0} terminó.",
+  "Ler em voz alta": "Leer en voz alta",
+  "Opções: {0}.": "Opciones: {0}.",
+  "Quando um agente termina, lê o começo da resposta; quando ele precisa de você, lê a pergunta. Usa a voz do sistema.": "Cuando un agente termina, lee el comienzo de la respuesta; cuando te necesita, lee la pregunta. Usa la voz del sistema.",
 };

@@ -11,6 +11,7 @@ import type { SoundControl } from './sound';
 import { AboutGroup } from './version';
 import type { WorldThemeLink } from './world/world-dialog';
 import { LOCALE_STORAGE_KEY, LOCALES, normalizeLocale, tr, type Locale } from '../../../shared/i18n';
+import { VoiceReader } from './voice';
 
 type LanguageChoice = 'auto' | Locale;
 
@@ -211,6 +212,7 @@ export class SettingsPopover implements UiComponent {
         { class: 'ui-set-group' },
         h('h3', { text: tr('Avisos') }),
         sw('browserNotifications', tr('Notificações do navegador'), tr('Avisa quando alguém precisa de você e a aba está em segundo plano.'), () => void this.toggleNotifications()),
+        ...(VoiceReader.supported ? [sw('readAloud', tr('Ler em voz alta'), tr('Quando um agente termina, lê o começo da resposta; quando ele precisa de você, lê a pergunta. Usa a voz do sistema.'), flip('readAloud'))] : []),
       ),
       this.soundGroup.el,
       h('div', { class: 'ui-set-group' }, h('h3', { text: tr('Idioma') }), this.language.row),
