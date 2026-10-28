@@ -11642,3 +11642,19 @@ a.ui-link__badge:hover {
   flex-direction: column;
   gap: 6px;
 }
+
+.ui-studio__base {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ui-studio__base img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--ui-bg-solid);
+}
+.ui-studio__base .ui-studio__meta {
+  flex: 1;
+}

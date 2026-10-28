@@ -3445,4 +3445,12 @@ export const EN: Readonly<Record<string, string>> = {
   "Manda o seu comentário a {0}, que escreve outra versão": "Sends your comment to {0}, who writes another version",
   "A conversa que fez este pedido não está no escritório": "The conversation that made this request isn't in the office",
   "Anexar imagens de exemplo (ou cole uma com ⌘V)": "Attach example images (or paste one with ⌘V)",
+  "a imagem base não está mais na galeria": "the base image is no longer in the gallery",
+  "Base: {0}": "Base: {0}",
+  "Editar imagem": "Edit image",
+  "Editar: gerar uma versão a partir desta imagem": "Edit: generate a version from this image",
+  "Gerar versão editada": "Generate edited version",
+  "imagem base inválida (precisa ser da galeria deste projeto)": "invalid base image (must be from this project's gallery)",
+  "Não editar: gerar uma imagem nova": "Don't edit: generate a new image",
+  "O que mudar nesta imagem? (ex.: fundo transparente, mais escuro, sem a tampa)": "What to change in this image? (e.g. transparent background, darker, no lid)",
 };

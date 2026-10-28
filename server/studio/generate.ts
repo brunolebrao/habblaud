@@ -8,7 +8,7 @@
 // o Codex roda numa pasta só do Estúdio, com um pedido fixo (gerar e salvar uma imagem, nada mais), sem shell
 // (execFile) e com prazo. O Estúdio é opcional (HABBLAUD_STUDIO=1). Node puro: também é importado pelo auxiliar.
 import { execFile } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { tr } from '../../shared/i18n';
@@ -27,7 +27,15 @@ export interface StudioRequest {
   /** Título curto da imagem (vai no nome do arquivo e na galeria). */
   title: string;
   prompt: string;
+  /** Edição: a imagem da galeria que serve de base ("<projeto>/<data>/<nome>.png", do mesmo projeto). */
+  source?: string;
+  /** Trabalho do Higgsfield que gerou a imagem base (serve de referência sem reenviar o arquivo). */
+  sourceJob?: string;
 }
+
+/** Imagem da galeria: "<projeto>/<data>/<nome>.<png|jpg|webp>". */
+export const SOURCE_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}\.(?:png|jpe?g|webp)$/;
+const JOB_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export interface StudioOutput {
   /** Caminho relativo à raiz: "<projeto>/<data>/<nome>.png". */
@@ -59,7 +67,15 @@ export function parseStudioRequest(raw: unknown, maxPrompt = PROMPT_MAX): Studio
   const rawTitle = typeof r.title === 'string' ? r.title.replace(/\s+/g, ' ').trim() : '';
   if (rawTitle.length > TITLE_MAX) return { error: tr('título longo demais (até {0} caracteres)', [TITLE_MAX]) };
   const title = rawTitle || prompt.replace(/\s+/g, ' ').slice(0, 60).trim();
-  return { project, title, prompt };
+  let source: string | undefined;
+  if (r.source !== undefined && r.source !== null && r.source !== '') {
+    if (typeof r.source !== 'string' || !SOURCE_RE.test(r.source) || r.source.includes('..') || !r.source.startsWith(`${project}/`)) {
+      return { error: tr('imagem base inválida (precisa ser da galeria deste projeto)') };
+    }
+    source = r.source;
+  }
+  const sourceJob = source && typeof r.sourceJob === 'string' && JOB_RE.test(r.sourceJob) ? r.sourceJob : undefined;
+  return { project, title, prompt, ...(source ? { source } : {}), ...(sourceJob ? { sourceJob } : {}) };
 }
 
 export function studioRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -81,11 +97,23 @@ export function imageBaseName(title: string, time: string): string {
 }
 
 /** O pedido fixo ao Codex. */
-export function codexInstruction(prompt: string, fileName: string): string {
+export function codexInstruction(prompt: string, fileName: string, ref?: { path: string; job?: string }): string {
   // No `codex exec` a ferramenta nativa (image_gen) só existe no app Desktop; aqui o caminho é o conector Higgsfield da
   // conta, que gera na nuvem: o Codex espera o trabalho terminar e baixa a imagem para a pasta.
+  const edit = ref
+    ? [
+        '',
+        'É uma EDIÇÃO: a nova imagem parte da imagem base "' + ref.path + '" (anexada a esta conversa) e muda só o que o prompt pede;',
+        'mantenha o resto (objeto, forma, cores, enquadramento e fundo) igual.',
+        ref.job
+          ? '- Referência: passe o trabalho do Higgsfield ' + ref.job + ' como imagem de referência (medias) no generate_image.'
+          : '- Referência: envie a imagem base ao Higgsfield com mcp__codex_apps__higgsfield_media_upload (siga a descrição da ferramenta) e passe a mídia como imagem de referência (medias) no generate_image.',
+        '- Com a ferramenta nativa image_gen, passe a imagem base em referenced_image_paths.',
+      ]
+    : [];
   return [
     'Gere UMA única imagem a partir do prompt abaixo e salve-a nesta pasta com o nome exato "' + fileName + '".',
+    ...edit,
     '',
     'Como gerar:',
     '- Se você tiver a ferramenta nativa image_gen, use-a e copie o arquivo gerado para esta pasta com esse nome.',
@@ -95,12 +123,29 @@ export function codexInstruction(prompt: string, fileName: string): string {
     '',
     'Regras:',
     '- Use o prompt EXATAMENTE como está: não reescreva, não resuma, não traduza e não troque o estilo.',
-    '- Gere só uma imagem (uma chamada, count 1). Não crie nem altere nenhum outro arquivo e não rode outros comandos além do download.',
+    '- Gere só uma imagem (uma chamada, count 1). Não crie nem altere nenhum outro arquivo e não rode outros comandos além do envio da imagem base e do download.',
     '- Termine só quando o arquivo "' + fileName + '" existir nesta pasta.',
+    '- Na última linha da resposta escreva HIGGSFIELD_JOB=<id do trabalho do Higgsfield> (ou HIGGSFIELD_JOB=nenhum).',
     '',
     'Prompt:',
     prompt,
   ].join('\n');
+}
+
+/** Trabalho do Higgsfield guardado no .json ao lado de uma imagem da galeria, ou undefined. */
+function jobOfImage(image: string): string | undefined {
+  try {
+    const meta = JSON.parse(readFileSync(image.replace(/\.[a-z]+$/i, '.json'), 'utf8')) as { job?: unknown };
+    return typeof meta.job === 'string' && JOB_RE.test(meta.job) ? meta.job : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Id do trabalho do Higgsfield na saída do Codex (a linha pedida ou o nome do arquivo baixado), ou undefined. */
+export function higgsfieldJobOf(output: string): string | undefined {
+  const id = /HIGGSFIELD_JOB=([0-9a-f-]{36})/i.exec(output)?.[1] ?? /hf_\d{8}_\d{6}_([0-9a-f-]{36})/.exec(output)?.[1];
+  return id && JOB_RE.test(id.toLowerCase()) ? id.toLowerCase() : undefined;
 }
 
 /** Imagem mais recente que o Codex guardou depois de `since` na pasta da sessão (~/.codex/generated_images/<sessão>/). */
@@ -174,7 +219,12 @@ export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenera
     const name = `${base}.png`;
     const target = join(dir, name);
     writeFileSync(join(dir, `${base}.md`), `# ${req.title}\n\n${req.prompt}\n`);
-    const args = ['exec', '-m', model, '--sandbox', 'danger-full-access', '--skip-git-repo-check', '-C', dir, codexInstruction(req.prompt, name)];
+    // Edição: a imagem base vai anexada (-i) e o trabalho dela no Higgsfield, se conhecido, como referência.
+    const baseImage = req.source ? join(root, req.source) : undefined;
+    if (baseImage && !existsSync(baseImage)) throw new Error(tr('a imagem base não está mais na galeria'));
+    const sourceJob = req.sourceJob ?? (baseImage ? jobOfImage(baseImage) : undefined);
+    const ref = baseImage ? { path: baseImage, ...(sourceJob ? { job: sourceJob } : {}) } : undefined;
+    const args = ['exec', '-m', model, '--sandbox', 'danger-full-access', '--skip-git-repo-check', ...(baseImage ? ['-i', baseImage] : []), '-C', dir, codexInstruction(req.prompt, name, ref)];
     const r = await run(opts.codexBin, args, dir);
     // O Codex às vezes deixa a imagem só na pasta dele: copia a desta sessão (nunca a de outra conversa).
     const session = sessionIdOf(r.output);
@@ -183,7 +233,8 @@ export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenera
       if (generated) copyFileSync(generated, target);
     }
     if (!existsSync(target)) throw new Error(r.ok ? tr('o Codex terminou sem gerar a imagem') : tr('o Codex falhou: {0}', [r.error]));
-    const meta = { project: req.project, title: req.title, prompt: req.prompt, model, createdAt: started.toISOString(), file: name };
+    const job = higgsfieldJobOf(r.output);
+    const meta = { project: req.project, title: req.title, prompt: req.prompt, model, createdAt: started.toISOString(), file: name, ...(job ? { job } : {}), ...(req.source ? { source: req.source } : {}) };
     writeFileSync(join(dir, `${base}.json`), `${JSON.stringify(meta, null, 2)}\n`);
     return { file: `${req.project}/${date}/${name}` };
   };

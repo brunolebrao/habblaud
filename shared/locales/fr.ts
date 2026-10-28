@@ -3462,4 +3462,12 @@ export const FR: Readonly<Record<string, string>> = {
   "Manda o seu comentário a {0}, que escreve outra versão": "Envoie votre commentaire à {0}, qui écrit une autre version",
   "A conversa que fez este pedido não está no escritório": "La conversation à l'origine de cette demande n'est pas au bureau",
   "Anexar imagens de exemplo (ou cole uma com ⌘V)": "Joindre des images d'exemple (ou collez-en une avec ⌘V)",
+  "a imagem base não está mais na galeria": "l'image de base n'est plus dans la galerie",
+  "Base: {0}": "Base : {0}",
+  "Editar imagem": "Modifier l'image",
+  "Editar: gerar uma versão a partir desta imagem": "Modifier : générer une version à partir de cette image",
+  "Gerar versão editada": "Générer la version modifiée",
+  "imagem base inválida (precisa ser da galeria deste projeto)": "image de base invalide (doit venir de la galerie de ce projet)",
+  "Não editar: gerar uma imagem nova": "Ne pas modifier : générer une nouvelle image",
+  "O que mudar nesta imagem? (ex.: fundo transparente, mais escuro, sem a tampa)": "Que changer dans cette image ? (ex. : fond transparent, plus sombre, sans le couvercle)",
 };

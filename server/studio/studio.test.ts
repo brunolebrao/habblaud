@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, utimesSync, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { codexInstruction, createCodexImageGenerator, imageBaseName, parseStudioRequest, projectSlug } from './generate';
+import { codexInstruction, createCodexImageGenerator, higgsfieldJobOf, imageBaseName, parseStudioRequest, projectSlug } from './generate';
 import { listGallery, readGalleryFile, StudioService } from './studio';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'estudio-'));
@@ -220,5 +220,65 @@ describe('StudioService', () => {
     await new Promise((ok) => setTimeout(ok, 0));
     expect(job(s, 'j1')).toMatchObject({ status: 'done' });
     expect(seen[0]).toContain('S');
+  });
+});
+
+describe('edição de imagem da galeria', () => {
+  const JOB = '4b9682c8-744d-4da1-b237-24255462e0ec';
+
+  it('aceita só imagem do mesmo projeto como base', () => {
+    expect(parseStudioRequest({ project: 'p', prompt: 'x', source: 'p/2026-10-28/a.png' })).toMatchObject({ source: 'p/2026-10-28/a.png' });
+    expect(parseStudioRequest({ project: 'p', prompt: 'x', source: 'q/2026-10-28/a.png' })).toMatchObject({ error: expect.any(String) });
+    expect(parseStudioRequest({ project: 'p', prompt: 'x', source: 'p/2026-10-28/../a.png' })).toMatchObject({ error: expect.any(String) });
+  });
+
+  it('acha o trabalho do Higgsfield na saída do Codex', () => {
+    expect(higgsfieldJobOf(`...\nHIGGSFIELD_JOB=${JOB}`)).toBe(JOB);
+    expect(higgsfieldJobOf(`curl -o a.png https://x.cloudfront.net/u/hf_20261028_182613_${JOB}.png`)).toBe(JOB);
+    expect(higgsfieldJobOf('HIGGSFIELD_JOB=nenhum')).toBeUndefined();
+  });
+
+  it('anexa a base (-i), usa o trabalho dela como referência e guarda o novo trabalho', async () => {
+    const root = tmp();
+    mkdirSync(join(root, 'p/2026-10-28'), { recursive: true });
+    writeFileSync(join(root, 'p/2026-10-28/a.png'), 'x');
+    writeFileSync(join(root, 'p/2026-10-28/a.json'), JSON.stringify({ job: JOB }));
+    let seen: string[] = [];
+    const gen = createCodexImageGenerator({
+      codexBin: '/bin/codex',
+      root,
+      codexHome: tmp(),
+      now: () => new Date(2026, 9, 28, 15, 0, 0),
+      run: async (_bin, args, cwd) => {
+        seen = args;
+        writeFileSync(join(cwd, '150000-a-v2.png'), 'y');
+        return { ok: true, output: 'HIGGSFIELD_JOB=11111111-2222-3333-4444-555555555555' };
+      },
+    });
+    const out = await gen({ project: 'p', title: 'a v2', prompt: 'fundo transparente', source: 'p/2026-10-28/a.png' });
+    expect(seen.slice(seen.indexOf('-i'), seen.indexOf('-i') + 3)).toEqual(['-i', join(root, 'p/2026-10-28/a.png'), '-C']);
+    expect(seen.at(-1)).toContain(JOB);
+    const meta = JSON.parse(readFileSync(join(root, out.file.replace(/\.png$/, '.json')), 'utf8'));
+    expect(meta).toMatchObject({ job: '11111111-2222-3333-4444-555555555555', source: 'p/2026-10-28/a.png' });
+  });
+
+  it('o serviço recusa base que não está na galeria e repassa a que está', () => {
+    const root = tmp();
+    mkdirSync(join(root, 'p/2026-10-28'), { recursive: true });
+    writeFileSync(join(root, 'p/2026-10-28/a.png'), 'x');
+    const s = new StudioService({ root, newId: () => 'j1' });
+    expect(s.submit({ project: 'p', prompt: 'x', source: 'p/2026-10-28/b.png' })).toMatchObject({ error: 'invalid' });
+    s.submit({ project: 'p', prompt: 'x', source: 'p/2026-10-28/a.png' });
+    s.approve('j1', {});
+    s.poll();
+    s.approve('j1', {});
+    expect(s.jobs()[0]).toMatchObject({ source: 'p/2026-10-28/a.png' });
+  });
+
+  it('a instrução de edição pede para manter o resto e usar a referência', () => {
+    const t = codexInstruction('fundo transparente', 'b.png', { path: '/e/a.png', job: JOB });
+    expect(t).toContain('EDIÇÃO');
+    expect(t).toContain(JOB);
+    expect(codexInstruction('x', 'b.png', { path: '/e/a.png' })).toContain('media_upload');
   });
 });

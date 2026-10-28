@@ -158,6 +158,8 @@ export class Studio implements UiComponent {
   /** Rascunhos (formulários abertos não são refeitos a cada atualização). */
   private editing = false;
   private lastKey = '';
+  /** Leva uma imagem da galeria ao formulário como base de uma edição (montado com a tela do projeto). */
+  private editImage?: (item: StudioItemView | undefined) => void;
 
   constructor(private ctx: UiContext) {
     this.badge = h('span', { class: 'ui-studio-badge', hidden: true });
@@ -375,14 +377,43 @@ export class Studio implements UiComponent {
     const prompt = area({ maxlength: '4000', placeholder: tr('Descreva a imagem: assunto, pose, cores, enquadramento…'), 'aria-label': tr('Prompt da imagem') });
     const go = h('button', { class: 'ui-btn ui-btn--primary', type: 'submit', text: tr('Gerar imagem') }) as HTMLButtonElement;
     go.disabled = !s.available;
-    const form = h('form', { class: 'ui-studio__form' }, h('h3', { class: 'ui-studio__h', text: tr('Nova imagem') }), title, prompt, h('div', { class: 'ui-studio__actions' }, go));
+    // Editar uma imagem da galeria: ela vira a base e o prompt diz só o que mudar.
+    let source: StudioItemView | undefined;
+    const heading = h('h3', { class: 'ui-studio__h', text: tr('Nova imagem') });
+    const baseThumb = h('img', { attrs: { alt: '' } });
+    const baseLabel = h('span', { class: 'ui-studio__meta' });
+    const baseBox = h(
+      'div',
+      { class: 'ui-studio__base' },
+      baseThumb,
+      baseLabel,
+      iconButton(ICONS.close, tr('Não editar: gerar uma imagem nova'), () => setSource(undefined), 'ui-icon-btn--sm'),
+    );
+    const setSource = (item: StudioItemView | undefined) => {
+      source = item;
+      setHidden(baseBox, !item);
+      setText(heading, item ? tr('Editar imagem') : tr('Nova imagem'));
+      setText(go, item ? tr('Gerar versão editada') : tr('Gerar imagem'));
+      prompt.placeholder = item ? tr('O que mudar nesta imagem? (ex.: fundo transparente, mais escuro, sem a tampa)') : tr('Descreva a imagem: assunto, pose, cores, enquadramento…');
+      if (item) {
+        baseThumb.setAttribute('src', fileUrl(item.file));
+        setText(baseLabel, tr('Base: {0}', [item.title ?? item.file]));
+        title.value = `${item.title ?? ''} v2`.trim().slice(0, 80);
+        this.editing = true;
+        form.scrollIntoView({ block: 'nearest' });
+        prompt.focus();
+      }
+    };
+    this.editImage = setSource;
+    const form = h('form', { class: 'ui-studio__form' }, heading, baseBox, title, prompt, h('div', { class: 'ui-studio__actions' }, go));
+    setHidden(baseBox, true);
     form.addEventListener('input', () => {
       this.editing = !!(title.value || prompt.value);
     });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!prompt.value.trim()) return void setText(this.status, tr('Escreva o prompt.'));
-      void this.act(() => call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: p.slug, title: title.value, prompt: prompt.value }) }), tr('Gerando: leva de 1 a 3 minutos.'));
+      void this.act(() => call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: p.slug, title: title.value, prompt: prompt.value, ...(source ? { source: source.file } : {}) }) }), tr('Gerando: leva de 1 a 3 minutos.'));
     });
 
     const now = Date.now();
@@ -504,11 +535,13 @@ export class Studio implements UiComponent {
     const link = h('a', { class: 'ui-studio__thumb', attrs: { href: url, target: '_blank', rel: 'noopener noreferrer', title: i.prompt ?? label } }, img);
     const copy = iconButton(ICONS.copy, tr('Copiar o prompt'), () => void copyText(i.prompt ?? ''), 'ui-icon-btn--sm');
     setHidden(copy, !i.prompt);
+    const edit = iconButton(ICONS.pencil, tr('Editar: gerar uma versão a partir desta imagem'), () => this.editImage?.(i), 'ui-icon-btn--sm');
+    edit.disabled = !this.state.available;
     return h(
       'figure',
       { class: 'ui-studio__item' },
       link,
-      h('figcaption', {}, h('span', { class: 'ui-studio__meta', text: label, attrs: { title: `${i.date}${i.model ? ` · ${i.model}` : ''}` } }), copy),
+      h('figcaption', {}, h('span', { class: 'ui-studio__meta', text: label, attrs: { title: `${i.date}${i.model ? ` · ${i.model}` : ''}` } }), edit, copy),
     );
   }
 }

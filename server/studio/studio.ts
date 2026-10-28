@@ -7,7 +7,7 @@
 //   POST /api/host/studio/ack. A galeria vem da raiz montada somente leitura no container (/estudio).
 // Projetos e pedidos esperando ficam em <dataDir>/studio.json (sobrevivem a reinícios).
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, sep } from 'node:path';
 import { tr } from '../../shared/i18n';
 import { HostWait, pollWithWait } from '../host-wait';
@@ -42,6 +42,8 @@ export interface StudioJob {
   title: string;
   /** O prompt como foi pedido (sem o guia de estilo do projeto). */
   prompt: string;
+  /** Edição: a imagem da galeria que serve de base. */
+  source?: string;
   status: StudioJobStatus;
   at: number;
   /** Quem pediu (o agente diz o próprio nome; só para mostrar). Ausente = o painel. */
@@ -259,11 +261,12 @@ export class StudioService {
     } else if (this.jobs().filter((j) => j.status === 'pending').length >= MAX_PENDING) {
       return { error: 'too-many', reason: tr('pedidos demais esperando no Estúdio: aprove ou descarte alguns') };
     }
+    if (req.source && !existsSync(join(this.opts.root, req.source))) return { error: 'invalid', reason: tr('a imagem base não está mais na galeria') };
     if (!this.projectsBySlug.has(req.project)) {
       if (this.projectsBySlug.size >= MAX_PROJECTS) return { error: 'too-many', reason: tr('projetos demais') };
       this.projectsBySlug.set(req.project, { slug: req.project, name: req.project, updatedAt: this.now() });
     }
-    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
+    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, ...(req.source ? { source: req.source } : {}), status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
     const entry: Entry = { job, touched: this.now() };
     this.entries.set(job.id, entry);
     if (opts.direct) this.start(entry);
@@ -277,7 +280,7 @@ export class StudioService {
     const e = this.entries.get(id);
     if (!e || e.job.status !== 'pending') return { error: 'unknown', reason: tr('pedido desconhecido (já aprovado ou descartado?)') };
     const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt });
+    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt, source: e.job.source });
     if ('error' in req) return { error: 'invalid', reason: req.error };
     const busy = this.busy();
     if (busy) return busy;
@@ -377,7 +380,7 @@ export class StudioService {
   }
 
   private request(job: StudioJob): StudioRequest {
-    return { project: job.project, title: job.title, prompt: composePrompt(job.prompt, this.projectsBySlug.get(job.project)?.style) };
+    return { project: job.project, title: job.title, prompt: composePrompt(job.prompt, this.projectsBySlug.get(job.project)?.style), ...(job.source ? { source: job.source } : {}) };
   }
 
   private start(e: Entry): void {
