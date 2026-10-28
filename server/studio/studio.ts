@@ -273,9 +273,20 @@ export class StudioService {
     return { job: { ...e.job } };
   }
 
+  /** Pedido que falhou volta a esperar você (para conferir e gerar de novo). */
+  retry(id: string): boolean {
+    const e = this.entries.get(id);
+    if (!e || e.job.status !== 'failed') return false;
+    e.job.status = 'pending';
+    delete e.job.error;
+    e.touched = this.now();
+    this.save();
+    return true;
+  }
+
   discard(id: string): boolean {
     const e = this.entries.get(id);
-    if (!e || e.job.status !== 'pending') return false;
+    if (!e || (e.job.status !== 'pending' && e.job.status !== 'failed')) return false;
     this.entries.delete(id);
     this.save();
     return true;

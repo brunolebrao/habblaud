@@ -148,6 +148,18 @@ describe('StudioService', () => {
     expect(s.submit({ project: 'p', prompt: 'x' }, { direct: true })).toMatchObject({ job: { status: 'queued' } });
   });
 
+  it('falhou: tentar de novo volta a esperar você', () => {
+    const s = svc();
+    s.poll();
+    s.submit({ project: 'p', prompt: 'x' }, { direct: true });
+    s.poll();
+    s.ack({ results: [{ id: 'j1', ok: false, error: 'x' }] });
+    expect(s.retry('j1')).toBe(true);
+    expect(job(s, 'j1')).toMatchObject({ status: 'pending' });
+    expect(job(s, 'j1')?.error).toBeUndefined();
+    expect(s.retry('j1')).toBe(false);
+  });
+
   it('descartar some com o pedido; aprovar de novo não vale', () => {
     const s = svc();
     s.submit({ project: 'p', prompt: 'x' });

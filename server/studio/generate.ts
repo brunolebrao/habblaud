@@ -82,9 +82,21 @@ export function imageBaseName(title: string, time: string): string {
 
 /** O pedido fixo ao Codex. */
 export function codexInstruction(prompt: string, fileName: string): string {
+  // No `codex exec` a ferramenta nativa (image_gen) só existe no app Desktop; aqui o caminho é o conector Higgsfield da
+  // conta, que gera na nuvem: o Codex espera o trabalho terminar e baixa a imagem para a pasta.
   return [
-    'Gere UMA imagem com a sua ferramenta de geração de imagens, a partir do prompt abaixo.',
-    `Salve o resultado nesta pasta, com o nome exato "${fileName}". Não crie nem altere nenhum outro arquivo e não rode outros comandos.`,
+    'Gere UMA única imagem a partir do prompt abaixo e salve-a nesta pasta com o nome exato "' + fileName + '".',
+    '',
+    'Como gerar:',
+    '- Se você tiver a ferramenta nativa image_gen, use-a e copie o arquivo gerado para esta pasta com esse nome.',
+    '- Senão, use mcp__codex_apps__higgsfield_generate_image com params {model: "gpt_image_2_5", count: 1, aspect_ratio: "1:1", prompt: <o prompt abaixo>}.',
+    '  Depois espere o trabalho terminar (jobs_wait com timeout_seconds 15, repetindo, ou job_status com sync: true),',
+    '  pegue o endereço (URL) da imagem pronta e baixe-a com: curl -fsSL -o "' + fileName + '" "<URL>"',
+    '',
+    'Regras:',
+    '- Use o prompt EXATAMENTE como está: não reescreva, não resuma, não traduza e não troque o estilo.',
+    '- Gere só uma imagem (uma chamada, count 1). Não crie nem altere nenhum outro arquivo e não rode outros comandos além do download.',
+    '- Termine só quando o arquivo "' + fileName + '" existir nesta pasta.',
     '',
     'Prompt:',
     prompt,
