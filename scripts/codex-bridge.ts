@@ -26,6 +26,7 @@ import { createCliRunner, createOpener, folderProblem, launch, parseSpawn, type 
 import { runnableClaudeBin } from '../server/claude-bin';
 import { ATTACHMENT_MAX_BYTES, ATTACHMENTS_PER_SPAWN, attachmentsRoot, promptWithAttachments, safeFileName, writeAttachments, type Attachment } from '../server/spawn/attachments';
 import { createWhisperTranscriber, findWhisper, type Transcriber } from '../server/dictation/whisper';
+import { createCodexImageGenerator, parseStudioRequest, studioRoot, type StudioGenerator } from '../server/studio/generate';
 import { checkFile, insideKnownFolder, tempRoots } from '../server/deliveries/files';
 import { discoverClaudeDirs } from '../server/accounts/detect';
 import { HOST_WAIT_MS } from '../server/host-wait';
@@ -284,6 +285,41 @@ export async function dictationRound(post: Post, transcribe: Transcriber, log: (
 }
 
 /**
+ * Estúdio: busca os pedidos de imagem (POST /api/host/studio/poll), gera cada um com o Codex (studio/generate.ts, na
+ * pasta do Estúdio deste computador) e devolve o caminho da imagem em /api/host/studio/ack. O prompt nunca vai para a
+ * tela. Nunca lança.
+ */
+export async function studioRound(post: Post, generate: StudioGenerator, log: (line: string) => void = () => {}, opts: { wait?: boolean } = {}): Promise<RoundResult> {
+  const polled = await post(`/api/host/studio/poll${opts.wait ? '?wait=1' : ''}`, {});
+  if (!polled) return { state: 'down' };
+  const list = rec(polled.json)?.jobs;
+  if (polled.status !== 200 || !Array.isArray(list)) return { state: 'refused', status: polled.status };
+  const results: Array<BridgeResult & { file?: string }> = [];
+  for (const raw of list) {
+    const r = rec(raw);
+    const id = typeof r?.id === 'string' ? r.id : '';
+    if (!id) continue;
+    const req = parseStudioRequest(r);
+    if ('error' in req) {
+      results.push({ id, ok: false, error: req.error });
+      continue;
+    }
+    const started = Date.now();
+    try {
+      const out = await generate(req);
+      results.push({ id, ok: true, file: out.file });
+      log(tr('✓ imagem do Estúdio gerada ({0}, {1} s)', [req.project, Math.round((Date.now() - started) / 1000)]));
+    } catch (err) {
+      const error = (err as Error)?.message || tr('o Codex falhou');
+      results.push({ id, ok: false, error });
+      log(tr('✗ Estúdio: {0}', [error]));
+    }
+  }
+  if (results.length) await post('/api/host/studio/ack', { results });
+  return { state: 'ok', results };
+}
+
+/**
  * Arquivos das entregas: busca os caminhos pedidos (POST /api/host/files/poll), confere cada um com checkFile (tipo de
  * ver, nada com cara de segredo, até 25 MB, links resolvidos) e com `inside` (pastas que pode ler) e devolve o conteúdo
  * em /api/host/files/ack. Nunca lança.
@@ -367,6 +403,11 @@ async function main(): Promise<void> {
     if (transcribe) {
       const t = transcribe;
       void waitLoop(() => dictationRound(waitPost, t, log, { wait: true }));
+    }
+    // Estúdio (HABBLAUD_STUDIO=1 no Habblaud): com o Habblaud recusando, só pergunta de novo a cada minuto.
+    if (bin) {
+      const generate = createCodexImageGenerator({ codexBin: bin, root: studioRoot(process.env) });
+      void waitLoop(() => studioRound(waitPost, generate, log, { wait: true }));
     }
   }
   let last = '';
