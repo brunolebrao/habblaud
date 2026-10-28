@@ -339,7 +339,7 @@ export function renderOverride(
   if (fixedRooms.length) env.push(['HABBLAUD_FIXED_ROOMS', fixedRooms.join(',')]);
   if (brandDir) env.push(['HABBLAUD_BRAND_DIR', CONTAINER_BRAND_DIR]);
   if (attachmentsDir) env.push(['HABBLAUD_ATTACHMENTS_DIR', CONTAINER_ATTACHMENTS_DIR], ['HABBLAUD_ATTACHMENTS_HOST_DIR', attachmentsDir]);
-  if (studioDir) env.push(['HABBLAUD_STUDIO_DIR', CONTAINER_STUDIO_DIR]);
+  if (studioDir) env.push(['HABBLAUD_STUDIO', '1'], ['HABBLAUD_STUDIO_DIR', CONTAINER_STUDIO_DIR]);
   const lines = [
     `# Gerado por scripts/docker-up.ts em ${generatedAt.toISOString()} — não edite: é recriado a cada \`npm run docker:up\`.`,
     '# Contém caminhos do host e e-mails das contas: fica fora do git e com permissão 600.',
