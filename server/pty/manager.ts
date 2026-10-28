@@ -21,6 +21,8 @@ import { readProcInfo, sameProcess, type ProcInfo, type RegisteredProc } from '.
 import { killWithConsoleReset } from './winkill';
 import { tr } from '../../shared/i18n';
 import { isExecutableFile } from '../claude-bin';
+import { modeFromScreen, SHIFT_TAB } from './mode';
+import type { PermissionModeChoice } from '../../shared/types';
 
 export { claudeBinFrom, findExecutable, isExecutableFile } from '../claude-bin';
 
@@ -61,6 +63,8 @@ export interface PtyScreen {
   write(data: string, done?: () => void): void;
   resize(cols: number, rows: number): void;
   serialize(): string;
+  /** Texto da tela visível, sem cores (o rodapé do Claude Code diz o modo; ver pty/mode.ts). */
+  text(): string;
   dispose(): void;
 }
 
@@ -94,6 +98,10 @@ export interface PtyManagerOptions {
 }
 
 /** Saída bruta guardada por terminal quando não há o @xterm/headless (ver rawScreen). */
+/** Espera depois de cada Shift+Tab até o rodapé redesenhar. */
+const MODE_SETTLE_MS = 350;
+/** Uma volta inteira pelos modos (padrão, aceitar edições, plano, auto, sem permissões). */
+const MODE_MAX_PRESSES = 5;
 const MAX_SCROLLBACK = 512 * 1024;
 /** Terminais encerrados continuam na lista por um tempo, para a tela final ainda poder ser vista. */
 const EXITED_KEEP_MS = 10 * 60_000;
@@ -142,6 +150,8 @@ export function rawScreen(): PtyScreen {
     },
     resize() {},
     serialize: () => buffer,
+    // Sem o @xterm/headless: o fim da saída bruta, sem as sequências de escape.
+    text: () => buffer.slice(-8_000).replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b./g, '').replace(/\r/g, ''),
     dispose() {
       buffer = '';
     },
@@ -328,6 +338,26 @@ export class PtyManager {
       if (pty.info.exitedAt !== undefined) res.write(frame('exit', { code: pty.info.exitCode ?? 0 }));
       pty.clients.add(res);
     });
+  }
+
+  /**
+   * Troca o modo de permissão de um agente aberto aqui: aperta Shift+Tab e confere o rodapé até chegar ao modo pedido
+   * (no máximo uma volta inteira). Devolve o modo em que ficou.
+   */
+  async setMode(agentId: string, mode: PermissionModeChoice): Promise<string> {
+    const pty = this.byAgent(agentId);
+    if (!pty) throw new PtyError(409, tr('esta sessão não roda no terminal interativo do Habblaud'));
+    const settle = () => this.sleep(MODE_SETTLE_MS).then(() => new Promise<void>((ok) => pty.screen.write('', ok)));
+    await settle();
+    for (let i = 0; i <= MODE_MAX_PRESSES; i++) {
+      const now = modeFromScreen(pty.screen.text());
+      if (now === undefined) throw new PtyError(409, tr('não deu para ler o modo na tela do terminal'));
+      if (now === mode) return now;
+      if (i === MODE_MAX_PRESSES) break;
+      pty.proc.write(SHIFT_TAB);
+      await settle();
+    }
+    throw new PtyError(409, tr('o modo {0} não apareceu ao trocar (ele está liberado nesta sessão?)', [mode]));
   }
 
   input(id: string, data: unknown): void {

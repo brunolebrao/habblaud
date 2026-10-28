@@ -98,8 +98,8 @@ export interface ApiDeps {
 
 /** GET /api/agents/:id/terminal (ids nunca contêm '/'). */
 const TERMINAL_ROUTE = /^\/api\/agents\/([^/]+)\/terminal$/;
-/** POST /api/agents/:id/stop|takeover (terminal interativo). */
-const AGENT_ACTION_ROUTE = /^\/api\/agents\/[^/]+\/(stop|takeover)$/;
+/** POST /api/agents/:id/stop|takeover|mode (terminal interativo). */
+const AGENT_ACTION_ROUTE = /^\/api\/agents\/[^/]+\/(stop|takeover|mode)$/;
 
 /** PUT|DELETE /api/agents/:id/character: personagem do projeto (ver Office.setCharacter). */
 const CHARACTER_ROUTE = /^\/api\/agents\/([^/]+)\/character$/;

@@ -21,6 +21,7 @@ import {
   type SpawnPty,
 } from './manager';
 import type { ProcInfo } from './procinfo';
+import { modeFromScreen, SHIFT_TAB } from './mode';
 
 const SESSION = '0f8fad5b-d9cb-469f-a165-70867728950e';
 const PID = 4242;
@@ -253,6 +254,7 @@ describe('PtyManager: tela para quem conecta', () => {
       },
       resize() {},
       serialize: () => `[tela:${content}]`,
+      text: () => content,
       dispose() {},
     };
     let proc: FakeProc | undefined;
@@ -363,4 +365,67 @@ describe('carregar o node-pty e achar o claude', () => {
       expect(claudeBinFrom({ ...env, HABBLAUD_CLAUDE_BIN: 'outro' })).toBeUndefined();
     }),
   );
+});
+
+describe('PtyManager: trocar o modo', () => {
+  const FOOTERS = ['⏸ manual mode on', '⏵⏵ accept edits on (shift+tab to cycle)', '⏸ plan mode on (shift+tab to cycle)', '⏵⏵ auto mode on'];
+
+  /** Terminal aberto aqui cujo rodapé anda um modo a cada Shift+Tab. */
+  function withFooter(cycle = FOOTERS) {
+    let presses = 0;
+    let proc: FakeProc | undefined;
+    const s = setup({
+      spawn: () => {
+        proc = new FakeProc(9001);
+        const write = proc.write.bind(proc);
+        proc.write = (d: string) => {
+          if (d === SHIFT_TAB) presses++;
+          write(d);
+        };
+        return proc;
+      },
+      createScreen: () => ({ write: (_d, done) => done?.(), resize() {}, serialize: () => '', text: () => `> \n${cycle[presses % cycle.length]}`, dispose() {} }),
+    });
+    const info = s.manager.create({ cwd: tmpdir() });
+    return { s, agent: info.agentId!, presses: () => presses };
+  }
+
+  it('aperta Shift+Tab até o rodapé mostrar o modo pedido', async () => {
+    const t = withFooter();
+    expect(await t.s.manager.setMode(t.agent, 'plan')).toBe('plan');
+    expect(t.presses()).toBe(2);
+  });
+
+  it('já no modo: não aperta nada', async () => {
+    const t = withFooter();
+    expect(await t.s.manager.setMode(t.agent, 'default')).toBe('default');
+    expect(t.presses()).toBe(0);
+  });
+
+  it('modo que não aparece na volta (auto desligado): recusa depois de uma volta', async () => {
+    const t = withFooter(FOOTERS.slice(0, 3));
+    await rejects(t.s.manager.setMode(t.agent, 'auto'), 409);
+    expect(t.presses()).toBe(5);
+  });
+
+  it('sessão que não roda aqui: recusa', async () => {
+    const s = setup();
+    await rejects(s.manager.setMode(`acc:${PID}`, 'plan'), 409);
+  });
+});
+
+describe('modeFromScreen', () => {
+  it('lê o modo no rodapé', () => {
+    expect(modeFromScreen('texto\n  ⏵⏵ accept edits on (shift+tab to cycle)')).toBe('acceptEdits');
+    expect(modeFromScreen('x\n⏸ plan mode on')).toBe('plan');
+    expect(modeFromScreen('x\n⏵⏵ bypass permissions on')).toBe('bypassPermissions');
+    expect(modeFromScreen('> \n  ? for shortcuts')).toBe('default');
+    expect(modeFromScreen('❯ \n⏸ manual mode on · ← 2 agents')).toBe('default');
+    expect(modeFromScreen('   \n ')).toBeUndefined();
+    expect(modeFromScreen('Quick safety check: Is this a project you created or one you trust?\n❯ No, exit\nEnter to confirm · Esc to cancel')).toBeUndefined();
+  });
+
+  it('ignora "plan mode on" que só aparece lá em cima na conversa', () => {
+    expect(modeFromScreen(['plan mode on', ...Array(20).fill('linha'), '? for shortcuts'].join('\n'))).toBe('default');
+  });
 });

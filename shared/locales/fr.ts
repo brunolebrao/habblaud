@@ -3320,4 +3320,13 @@ export const FR: Readonly<Record<string, string>> = {
   "Plano (só planeja)": "Plan (planifie seulement)",
   "escolher o modo da sessão exige poder aprovar permissões por aqui": "choisir le mode de la session exige de pouvoir approuver les permissions d'ici",
   "brand.json: \"art\" precisa ser um destes: {0}": "brand.json : \"art\" doit être l'un de ceux-ci : {0}",
+  "Modo de permissão": "Mode d'autorisation",
+  "Trocando o modo no terminal…": "Changement de mode dans le terminal…",
+  "Modo: {0}.": "Mode : {0}.",
+  "A sessão roda em outro terminal: passa para {0} na próxima aprovação dela aqui.": "La session tourne dans un autre terminal : elle passe en {0} à sa prochaine approbation ici.",
+  "✓ Aprovar e passar para {0}": "✓ Approuver et passer en {0}",
+  "esperado {mode: default, acceptEdits, plan ou auto}": "attendu {mode: default, acceptEdits, plan ou auto}",
+  "esta sessão não roda no terminal interativo do Habblaud": "cette session ne tourne pas dans le terminal interactif de Habblaud",
+  "não deu para ler o modo na tela do terminal": "impossible de lire le mode sur l'écran du terminal",
+  "o modo {0} não apareceu ao trocar (ele está liberado nesta sessão?)": "le mode {0} n'est pas apparu en changeant (est-il activé dans cette session ?)",
 };
