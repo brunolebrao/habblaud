@@ -81,7 +81,7 @@ export function codexInstruction(prompt: string, fileName: string): string {
   ].join('\n');
 }
 
-/** Imagem mais recente que o Codex guardou depois de `since` (~/.codex/generated_images/<sessão>/*.png). */
+/** Imagem mais recente que o Codex guardou depois de `since` na pasta da sessão (~/.codex/generated_images/<sessão>/). */
 export function newestGenerated(dir: string, since: number): string | undefined {
   let best: { path: string; at: number } | undefined;
   const walk = (d: string, depth: number) => {
@@ -113,18 +113,26 @@ export interface CodexImageOptions {
   model?: string;
   codexHome?: string;
   now?: () => Date;
-  /** Roda o Codex (troca nos testes). */
-  run?: (bin: string, args: string[], cwd: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Roda o Codex (troca nos testes); `output` = o que ele escreveu (o cabeçalho traz o "session id"). */
+  run?: (bin: string, args: string[], cwd: string) => Promise<CodexRun>;
 }
 
-function runCodex(bin: string, args: string[], cwd: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export type CodexRun = ({ ok: true } | { ok: false; error: string }) & { output: string };
+
+function runCodex(bin: string, args: string[], cwd: string): Promise<CodexRun> {
   return new Promise((ok) => {
-    execFile(bin, args, { cwd, timeout: GENERATE_TIMEOUT_MS, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }, (err, _out, stderr) => {
-      if (!err) return ok({ ok: true });
+    execFile(bin, args, { cwd, timeout: GENERATE_TIMEOUT_MS, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }, (err, out, stderr) => {
+      const output = `${out ?? ''}\n${stderr ?? ''}`;
+      if (!err) return ok({ ok: true, output });
       const line = (stderr || err.message || '').split('\n').filter((l) => l.trim()).pop() ?? tr('falhou');
-      ok({ ok: false, error: line.trim().slice(0, 300) });
+      ok({ ok: false, error: line.trim().slice(0, 300), output });
     });
   });
+}
+
+/** Id da sessão que o `codex exec` abriu ("session id: <uuid>" no cabeçalho), ou undefined. */
+export function sessionIdOf(output: string): string | undefined {
+  return /session id:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(output)?.[1]?.toLowerCase();
 }
 
 export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenerator {
@@ -143,9 +151,10 @@ export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenera
     writeFileSync(join(dir, `${base}.md`), `${req.prompt}\n`);
     const args = ['exec', '-m', model, '--sandbox', 'danger-full-access', '--skip-git-repo-check', '-C', dir, codexInstruction(req.prompt, name)];
     const r = await run(opts.codexBin, args, dir);
-    // O Codex às vezes deixa a imagem só na pasta dele: copia a mais recente desta geração.
-    if (!existsSync(target)) {
-      const generated = newestGenerated(join(codexHome, 'generated_images'), started.getTime() - 1_000);
+    // O Codex às vezes deixa a imagem só na pasta dele: copia a desta sessão (nunca a de outra conversa).
+    const session = sessionIdOf(r.output);
+    if (!existsSync(target) && session) {
+      const generated = newestGenerated(join(codexHome, 'generated_images', session), started.getTime() - 1_000);
       if (generated) copyFileSync(generated, target);
     }
     if (!existsSync(target)) throw new Error(r.ok ? tr('o Codex terminou sem gerar a imagem') : tr('o Codex falhou: {0}', [r.error]));
