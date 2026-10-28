@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, utimesSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { codexInstruction, createCodexImageGenerator, higgsfieldJobOf, mirrorImage, projectGuide, studioMirror, writeProjectGuides, imageBaseName, parseStudioRequest, projectSlug } from './generate';
+import { codexInstruction, createCodexImageGenerator, higgsfieldJobOf, isImageFile, mirrorImage, projectGuide, studioMirror, writeProjectGuides, imageBaseName, parseStudioRequest, projectSlug } from './generate';
 import { listGallery, readGalleryFile, StudioService } from './studio';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'estudio-'));
@@ -251,7 +251,7 @@ describe('edição de imagem da galeria', () => {
       now: () => new Date(2026, 9, 28, 15, 0, 0),
       run: async (_bin, args, cwd) => {
         seen = args;
-        writeFileSync(join(cwd, '150000-a-v2.png'), 'y');
+        writeFileSync(join(cwd, '150000-a-v2.png'), PNG);
         return { ok: true, output: 'HIGGSFIELD_JOB=11111111-2222-3333-4444-555555555555' };
       },
     });
@@ -325,5 +325,17 @@ describe('agente do projeto (CLAUDE.md da pasta)', () => {
     const studio = new StudioService({ root: tmp(), hostRoot: '/Users/b/estudio/' });
     studio.saveProject({ name: 'Bases Funko' });
     expect(studio.projects()[0].folder).toBe('/Users/b/estudio/bases-funko');
+  });
+});
+
+describe('imagem vazia', () => {
+  it('não conta como imagem nem entra na galeria', () => {
+    const root = tmp();
+    mkdirSync(join(root, 'p/2026-10-28'), { recursive: true });
+    writeFileSync(join(root, 'p/2026-10-28/vazia.png'), '');
+    writeFileSync(join(root, 'p/2026-10-28/boa.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
+    expect(isImageFile(join(root, 'p/2026-10-28/vazia.png'))).toBe(false);
+    expect(isImageFile(join(root, 'p/2026-10-28/boa.png'))).toBe(true);
+    expect(new StudioService({ root }).gallery('p').map((i) => i.file)).toEqual(['p/2026-10-28/boa.png']);
   });
 });

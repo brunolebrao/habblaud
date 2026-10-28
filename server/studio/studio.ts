@@ -151,7 +151,9 @@ export function listGallery(root: string, only?: string): StudioItem[] {
         if (!IMAGE_TYPES[ext]) continue;
         let at = 0;
         try {
-          at = statSync(join(dir, name)).mtimeMs;
+          const st = statSync(join(dir, name));
+          if (!st.size) continue; // arquivo vazio (geração que falhou no meio): fora da galeria
+          at = st.mtimeMs;
         } catch {
           continue;
         }

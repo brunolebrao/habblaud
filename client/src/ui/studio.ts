@@ -94,7 +94,7 @@ export function parseStudio(raw: unknown): StudioState {
     const x = rec(p);
     const slug = str(x.slug);
     if (!slug || !SLUG_RE.test(slug)) return [];
-    return [{ slug, name: str(x.name) ?? slug, description: str(x.description), style: str(x.style), count: Number(x.count) || 0, cover: file(x.cover), pending: Number(x.pending) || 0, updatedAt: Number(x.updatedAt) || 0 }];
+    return [{ slug, name: str(x.name) ?? slug, description: str(x.description), style: str(x.style), count: Number(x.count) || 0, cover: file(x.cover), pending: Number(x.pending) || 0, updatedAt: Number(x.updatedAt) || 0, folder: str(x.folder) }];
   });
   return { available: o.available === true, projects, jobs, items };
 }

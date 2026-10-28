@@ -8,7 +8,7 @@
 // o Codex roda numa pasta só do Estúdio, com um pedido fixo (gerar e salvar uma imagem, nada mais), sem shell
 // (execFile) e com prazo. O Estúdio é opcional (HABBLAUD_STUDIO=1). Node puro: também é importado pelo auxiliar.
 import { execFile } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { tr } from '../../shared/i18n';
@@ -186,6 +186,20 @@ export interface CodexImageOptions {
   mirror?: string;
 }
 
+/** PNG, JPEG ou WebP de verdade (pelos primeiros bytes), não vazio. */
+export function isImageFile(path: string): boolean {
+  try {
+    const head = readFileSync(path).subarray(0, 12);
+    return (
+      head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ||
+      (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) ||
+      (head.subarray(0, 4).toString('latin1') === 'RIFF' && head.subarray(8, 12).toString('latin1') === 'WEBP')
+    );
+  } catch {
+    return false;
+  }
+}
+
 const GUIDE_MARK = '<!-- Gerado pelo Estúdio do Habblaud';
 
 /** CLAUDE.md da pasta do projeto: a agente aberta ali já sabe o estilo, o que existe e como pedir imagens. */
@@ -309,9 +323,11 @@ export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenera
     const r = await run(opts.codexBin, args, dir);
     // O Codex às vezes deixa a imagem só na pasta dele: copia a desta sessão (nunca a de outra conversa).
     const session = sessionIdOf(r.output);
+    // Arquivo vazio ou que não é imagem (ex.: um download que falhou): conta como não gerado.
+    if (existsSync(target) && !isImageFile(target)) unlinkSync(target);
     if (!existsSync(target) && session) {
       const generated = newestGenerated(join(codexHome, 'generated_images', session), started.getTime() - 1_000);
-      if (generated) copyFileSync(generated, target);
+      if (generated && isImageFile(generated)) copyFileSync(generated, target);
     }
     if (!existsSync(target)) throw new Error(r.ok ? tr('o Codex terminou sem gerar a imagem') : tr('o Codex falhou: {0}', [r.error]));
     const job = higgsfieldJobOf(r.output);
