@@ -1,6 +1,7 @@
 import http from 'node:http';
+import { StudioService } from '../studio/studio';
 import type { AddressInfo } from 'node:net';
-import { mkdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AccountsService } from '../accounts/service';
@@ -176,7 +177,7 @@ afterEach(async () => {
 });
 
 /** Uma porta local (sem login) e uma remota (com login), sobre a MESMA API, como no server/index.ts. */
-async function start(allow: RemoteFeature[] = ['permissions']): Promise<Harness> {
+async function start(allow: RemoteFeature[] = ['permissions'], extra: { studio?: StudioService } = {}): Promise<Harness> {
   const tmp = tempDir();
   const dir = join(tmp.dir, '.claude');
   mkdirSync(join(dir, 'sessions'), { recursive: true });
@@ -224,6 +225,7 @@ async function start(allow: RemoteFeature[] = ['permissions']): Promise<Harness>
       sendJson(res, 200, { ok: true });
     },
     renameRoom: () => 'sala',
+    studio: extra.studio,
     remote: { is: isRemoteRequest, allows: (f) => allowSet.has(f) },
     world: (req, res, url) => {
       req.resume();
@@ -638,5 +640,32 @@ describe('cookie Secure e download da CA', () => {
     expect(ca.status).toBe(200);
     expect(ca.headers['content-type']).toBe('application/x-x509-ca-cert');
     expect((await request(base, '/login')).body).toContain('/remote/ca.crt');
+  });
+});
+
+describe('Estúdio pela porta remota', () => {
+  it('logado: só VER a galeria (sem pedidos), nunca gerar, aprovar nem mexer em projetos', async () => {
+    const root = tempDir();
+    mkdirSync(join(root.dir, 'p/2026-10-28'), { recursive: true });
+    writeFileSync(join(root.dir, 'p/2026-10-28/a.png'), 'x');
+    const studio = new StudioService({ root: root.dir });
+    studio.submit({ project: 'p', prompt: 'segredo de agente' });
+    const s = await start(['permissions'], { studio });
+    const cookie = await login(s.remoteBase);
+    const headers = { Cookie: cookie };
+    const access = JSON.parse((await request(s.remoteBase, '/api/access', { headers })).body);
+    expect(access).toMatchObject({ studio: false, studioView: true });
+    const g = await request(s.remoteBase, '/api/studio?project=p', { headers });
+    expect(g.status).toBe(200);
+    const body = JSON.parse(g.body);
+    expect(body).toMatchObject({ readOnly: true, available: false, jobs: [] });
+    expect(body.items.map((i: { file: string }) => i.file)).toEqual(['p/2026-10-28/a.png']);
+    expect(body.projects[0].pending).toBe(0);
+    expect((await request(s.remoteBase, '/api/studio/file/p/2026-10-28/a.png', { headers })).status).toBe(200);
+    for (const [method, path] of [['POST', '/api/studio'], ['POST', '/api/studio/projects'], ['POST', '/api/studio/jobs/x/approve'], ['GET', '/api/studio/jobs/x']]) {
+      expect((await request(s.remoteBase, path, { method, headers, body: method === 'POST' ? {} : undefined })).status, `${method} ${path}`).toBe(403);
+    }
+    expect((await request(s.remoteBase, '/api/studio')).status).not.toBe(200);
+    root.cleanup();
   });
 });

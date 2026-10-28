@@ -411,7 +411,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
           messages: !!deps.messages && trusted(req, 'messages'),
           terminal: !!terminals && trusted(req, 'terminal'),
           spawn: !!deps.spawn && trusted(req, 'spawn'),
-          ...(deps.studio ? { studio: trusted(req) } : {}),
+          ...(deps.studio ? { studio: trusted(req), studioView: trusted(req) || remote } : {}),
           world: !!deps.world && !!deps.terminal && !remote && isLoopbackHost(req.headers.host),
         };
         sendJson(res, 200, access);
@@ -580,11 +580,14 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       const job = /^\/api\/studio\/jobs\/([^/]+)(?:\/(approve|discard|retry|revise))?$/.exec(path);
       const reply = (r: StudioSubmit, created = false) =>
         'job' in r ? sendJson(res, created ? 201 : 200, r.job) : sendJson(res, r.error === 'invalid' ? 400 : r.error === 'too-many' ? 429 : r.error === 'unknown' ? 404 : 409, { error: r.reason });
+      // Pelo acesso remoto (já passou pelo login): só VER a galeria (projetos, imagens e prompts), nunca gerar ou aprovar.
+      const viewOnly = !trusted(req) && isRemote(req) && isRead && (path === '/api/studio' || path === '/api/studio/projects' || path.startsWith('/api/studio/file/'));
       if (!studio) sendJson(res, 403, { error: tr('Estúdio desligado (HABBLAUD_STUDIO=1)') });
-      else if (!trusted(req)) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
+      else if (!trusted(req) && !viewOnly) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
       else if (path === '/api/studio' && isRead) {
         const project = url.searchParams.get('project') ?? undefined;
-        sendJson(res, 200, { available: studio.available(), projects: studio.projects(), jobs: studio.jobs(project), items: studio.gallery(project) });
+        if (viewOnly) sendJson(res, 200, { available: false, readOnly: true, projects: studio.projects().map((p) => ({ ...p, pending: 0 })), jobs: [], items: studio.gallery(project) });
+        else sendJson(res, 200, { available: studio.available(), projects: studio.projects(), jobs: studio.jobs(project), items: studio.gallery(project) });
       } else if (path === '/api/studio' && method === 'POST') {
         readJson(req, 64 * 1024).then((body) => reply(studio.submit(body, { direct: fromPanel }), true), (err) => fail(res, err));
       } else if (path === '/api/studio/projects' && isRead) sendJson(res, 200, { projects: studio.projects() });

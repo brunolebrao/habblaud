@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tr } from '../../shared/i18n';
 
 export const STUDIO_MODEL_DEFAULT = 'gpt-6-luna';
@@ -182,6 +182,28 @@ export interface CodexImageOptions {
   now?: () => Date;
   /** Roda o Codex (troca nos testes); `output` = o que ele escreveu (o cabeçalho traz o "session id"). */
   run?: (bin: string, args: string[], cwd: string) => Promise<CodexRun>;
+  /** Cópia de cada imagem pronta (ex.: uma pasta do Google Drive), em <espelho>/<projeto>/<data>/. Falha = só não copia. */
+  mirror?: string;
+}
+
+/** Pasta de cópia das imagens (HABBLAUD_STUDIO_MIRROR, com ~ do usuário), ou undefined. */
+export function studioMirror(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = env.HABBLAUD_STUDIO_MIRROR?.trim();
+  if (!raw) return undefined;
+  return raw.startsWith('~/') ? join(env.HOME || homedir(), raw.slice(2)) : raw;
+}
+
+/** Copia a imagem e os seus .md/.json para o espelho. Nunca lança: devolve o erro, se houver. */
+export function mirrorImage(root: string, mirror: string, rel: string): string | undefined {
+  try {
+    const dir = dirname(rel);
+    const stem = rel.replace(/\.[a-z]+$/i, '');
+    mkdirSync(join(mirror, dir), { recursive: true });
+    for (const f of [rel, `${stem}.md`, `${stem}.json`]) if (existsSync(join(root, f))) copyFileSync(join(root, f), join(mirror, f));
+    return undefined;
+  } catch (err) {
+    return (err as Error).message;
+  }
 }
 
 export type CodexRun = ({ ok: true } | { ok: false; error: string }) & { output: string };
@@ -236,6 +258,8 @@ export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenera
     const job = higgsfieldJobOf(r.output);
     const meta = { project: req.project, title: req.title, prompt: req.prompt, model, createdAt: started.toISOString(), file: name, ...(job ? { job } : {}), ...(req.source ? { source: req.source } : {}) };
     writeFileSync(join(dir, `${base}.json`), `${JSON.stringify(meta, null, 2)}\n`);
-    return { file: `${req.project}/${date}/${name}` };
+    const file = `${req.project}/${date}/${name}`;
+    if (opts.mirror) mirrorImage(root, opts.mirror, file);
+    return { file };
   };
 }

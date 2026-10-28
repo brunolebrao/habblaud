@@ -26,7 +26,7 @@ import { createCliRunner, createOpener, folderProblem, launch, parseSpawn, type 
 import { runnableClaudeBin } from '../server/claude-bin';
 import { ATTACHMENT_MAX_BYTES, ATTACHMENTS_PER_SPAWN, attachmentsRoot, promptWithAttachments, safeFileName, writeAttachments, type Attachment } from '../server/spawn/attachments';
 import { createWhisperTranscriber, findWhisper, type Transcriber } from '../server/dictation/whisper';
-import { COMPOSED_PROMPT_MAX, createCodexImageGenerator, parseStudioRequest, studioRoot, type StudioGenerator } from '../server/studio/generate';
+import { COMPOSED_PROMPT_MAX, createCodexImageGenerator, parseStudioRequest, studioMirror, studioRoot, type StudioGenerator } from '../server/studio/generate';
 import { checkFile, insideKnownFolder, tempRoots } from '../server/deliveries/files';
 import { discoverClaudeDirs } from '../server/accounts/detect';
 import { HOST_WAIT_MS } from '../server/host-wait';
@@ -413,7 +413,9 @@ async function main(): Promise<void> {
     }
     // Estúdio (HABBLAUD_STUDIO=1 no Habblaud): com o Habblaud recusando, só pergunta de novo a cada minuto.
     if (bin) {
-      const generate = createCodexImageGenerator({ codexBin: bin, root: studioRoot(process.env) });
+      const mirror = studioMirror(process.env);
+      if (mirror) log(tr('Estúdio: cada imagem também é copiada para {0}', [mirror]));
+      const generate = createCodexImageGenerator({ codexBin: bin, root: studioRoot(process.env), mirror });
       void waitLoop(() => studioRound(waitPost, generate, log, { wait: true }));
     }
   }

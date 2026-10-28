@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, utimesSync, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { codexInstruction, createCodexImageGenerator, higgsfieldJobOf, imageBaseName, parseStudioRequest, projectSlug } from './generate';
+import { codexInstruction, createCodexImageGenerator, higgsfieldJobOf, mirrorImage, studioMirror, imageBaseName, parseStudioRequest, projectSlug } from './generate';
 import { listGallery, readGalleryFile, StudioService } from './studio';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'estudio-'));
@@ -280,5 +280,22 @@ describe('edição de imagem da galeria', () => {
     expect(t).toContain('EDIÇÃO');
     expect(t).toContain(JOB);
     expect(codexInstruction('x', 'b.png', { path: '/e/a.png' })).toContain('media_upload');
+  });
+});
+
+describe('cópia no espelho (Google Drive)', () => {
+  it('copia a imagem com o .md e o .json, na mesma estrutura', () => {
+    const root = tmp();
+    const mirror = join(tmp(), 'Estúdio');
+    mkdirSync(join(root, 'p/2026-10-28'), { recursive: true });
+    for (const f of ['a.png', 'a.md', 'a.json']) writeFileSync(join(root, 'p/2026-10-28', f), f);
+    expect(mirrorImage(root, mirror, 'p/2026-10-28/a.png')).toBeUndefined();
+    expect(readFileSync(join(mirror, 'p/2026-10-28/a.json'), 'utf8')).toBe('a.json');
+    expect(readFileSync(join(mirror, 'p/2026-10-28/a.png'), 'utf8')).toBe('a.png');
+  });
+
+  it('a pasta vem de HABBLAUD_STUDIO_MIRROR (com ~)', () => {
+    expect(studioMirror({ HABBLAUD_STUDIO_MIRROR: '~/Drive/Estúdio', HOME: '/u' })).toBe('/u/Drive/Estúdio');
+    expect(studioMirror({})).toBeUndefined();
   });
 });

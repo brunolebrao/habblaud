@@ -153,6 +153,8 @@ export class Studio implements UiComponent {
   /** Projeto aberto ('' = início). */
   private project = remembered();
   private enabled = false;
+  /** Só ver (acesso remoto): galeria e prompts, sem gerar, aprovar nem editar. */
+  private readOnly = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private busy = false;
   /** Rascunhos (formulários abertos não são refeitos a cada atualização). */
@@ -190,7 +192,9 @@ export class Studio implements UiComponent {
   }
 
   render(): void {
-    const on = !!access().studio && !this.ctx.store.mock;
+    const a = access();
+    const on = !!(a.studio || a.studioView) && !this.ctx.store.mock;
+    this.readOnly = !a.studio;
     if (on === this.enabled) return;
     this.enabled = on;
     setHidden(this.button, !on);
@@ -248,7 +252,7 @@ export class Studio implements UiComponent {
   }
 
   private renderBadge(): void {
-    const n = pendingTotal(this.state.projects);
+    const n = this.readOnly ? 0 : pendingTotal(this.state.projects);
     setText(this.badge, n > 9 ? '9+' : String(n));
     setHidden(this.badge, n === 0);
     this.button.title = n ? tr('Estúdio: {0} pedido(s) de imagem esperando você', [n]) : tr('Estúdio: imagens geradas pelo Codex');
@@ -276,7 +280,8 @@ export class Studio implements UiComponent {
     const p = s.projects.find((x) => x.slug === this.project);
     setHidden(this.back, !p);
     setText(this.title, p ? p.name : tr('Estúdio'));
-    if (!s.available && !this.status.textContent) setText(this.status, tr('Sem o Codex agora: o auxiliar do computador (npm run codex:bridge) parou ou o Codex não está instalado.'));
+    if (this.readOnly) setText(this.status, tr('Só para ver: gerar, aprovar e editar imagens pelo próprio computador (https://habblaud.localhost).'));
+    else if (!s.available && !this.status.textContent) setText(this.status, tr('Sem o Codex agora: o auxiliar do computador (npm run codex:bridge) parou ou o Codex não está instalado.'));
     // Com um formulário sendo preenchido, não refaz a tela (só quando algo muda de verdade).
     const key = JSON.stringify([this.project, s.available, s.projects, s.jobs.map((j) => [j.id, j.status, j.error]), s.items.map((i) => i.file)]);
     if (key === this.lastKey || this.editing) return;
@@ -313,6 +318,10 @@ export class Studio implements UiComponent {
       form.querySelector('input')?.focus();
     });
     const empty = this.state.projects.length ? [] : [h('p', { class: 'ui-studio__empty', text: tr('Crie um projeto para cada tema (Funkos, D&D, miniaturas, cenários…). Cada um tem a sua galeria e o seu guia de estilo.') })];
+    if (this.readOnly) {
+      setHidden(add, true);
+      return [grid];
+    }
     return [...empty, grid, form];
   }
 
@@ -445,6 +454,7 @@ export class Studio implements UiComponent {
     const grid = h('div', { class: 'ui-studio__grid' }, ...s.items.map((i) => this.card(i)));
     const empty = s.items.length ? [] : [h('p', { class: 'ui-studio__empty', text: tr('Nenhuma imagem neste projeto ainda.') })];
     const hint = h('p', { class: 'ui-studio__hint', text: tr('Agentes pedem imagens com POST /api/studio {project: "{0}", title, prompt, requestedBy, session}; o pedido espera você aqui.', [p.slug]) });
+    if (this.readOnly) return [info, h('h3', { class: 'ui-studio__h', text: tr('Galeria') }), ...empty, grid];
     return [info, edit, editForm, ...pendingSec, form, jobs, h('h3', { class: 'ui-studio__h', text: tr('Galeria') }), ...empty, grid, hint];
   }
 
@@ -537,6 +547,7 @@ export class Studio implements UiComponent {
     setHidden(copy, !i.prompt);
     const edit = iconButton(ICONS.pencil, tr('Editar: gerar uma versão a partir desta imagem'), () => this.editImage?.(i), 'ui-icon-btn--sm');
     edit.disabled = !this.state.available;
+    setHidden(edit, this.readOnly);
     return h(
       'figure',
       { class: 'ui-studio__item' },

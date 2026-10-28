@@ -437,6 +437,8 @@ export interface AccessInfo {
   spawn: boolean;
   /** Pode usar o Estúdio de imagens (/api/studio): ligado (HABBLAUD_STUDIO=1), só pelo próprio computador. */
   studio?: boolean;
+  /** Pode VER a galeria do Estúdio (projetos, imagens e prompts): o próprio computador e o acesso remoto com login. */
+  studioView?: boolean;
   /**
    * Pode usar a conta do Habblaud World (/api/world/*): recurso ligado (HABBLAUD_WORLD), trava do terminal e porta local
    * com Host local. Ausente em servidores antigos.

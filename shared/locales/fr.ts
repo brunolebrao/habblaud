@@ -3472,4 +3472,6 @@ export const FR: Readonly<Record<string, string>> = {
   "O que mudar nesta imagem? (ex.: fundo transparente, mais escuro, sem a tampa)": "Que changer dans cette image ? (ex. : fond transparent, plus sombre, sans le couvercle)",
   "Mês (30 dias)": "Mois (30 jours)",
   "Mês": "Mois",
+  "Só para ver: gerar, aprovar e editar imagens pelo próprio computador (https://habblaud.localhost).": "Lecture seule : générer, approuver et modifier les images depuis l'ordinateur lui-même (https://habblaud.localhost).",
+  "Estúdio: cada imagem também é copiada para {0}": "Studio : chaque image est aussi copiée dans {0}",
 };

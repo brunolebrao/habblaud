@@ -53,7 +53,7 @@ import { recentFolders } from './spawn/folders';
 import { isDemoId } from '../shared/timeline';
 import { DictationService } from './dictation/dictation';
 import { StudioService } from './studio/studio';
-import { createCodexImageGenerator } from './studio/generate';
+import { createCodexImageGenerator, studioMirror } from './studio/generate';
 import { createWhisperTranscriber, findWhisper } from './dictation/whisper';
 import { DeliveryIndex } from './deliveries/deliveries';
 import { FileFetcher } from './deliveries/fetcher';
@@ -298,7 +298,7 @@ const studio = config.studio
   ? new StudioService({
       root: config.studioDir,
       stateFile: join(config.dataDir, 'studio.json'),
-      generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir }) : undefined,
+      generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir, mirror: studioMirror(process.env) }) : undefined,
       agentName: (session) => office.list().find((a) => a.sessionId === session && !a.id.startsWith(`${session}:`))?.name,
       // "Pedir ajuste": o comentário vai à sessão que escreveu o pedido, pelas mensagens do escritório.
       notify: (session, text, ids) => {
