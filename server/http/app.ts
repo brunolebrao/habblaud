@@ -577,7 +577,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       // (pedido do próprio navegador, mesma origem: Sec-Fetch-Site same-origin).
       const studio = deps.studio;
       const fromPanel = req.headers['sec-fetch-site'] === 'same-origin' && req.headers['x-habblaud-studio'] === 'panel';
-      const job = /^\/api\/studio\/jobs\/([^/]+)(?:\/(approve|discard|retry))?$/.exec(path);
+      const job = /^\/api\/studio\/jobs\/([^/]+)(?:\/(approve|discard|retry|revise))?$/.exec(path);
       const reply = (r: StudioSubmit, created = false) =>
         'job' in r ? sendJson(res, created ? 201 : 200, r.job) : sendJson(res, r.error === 'invalid' ? 400 : r.error === 'too-many' ? 429 : r.error === 'unknown' ? 404 : 409, { error: r.reason });
       if (!studio) sendJson(res, 403, { error: tr('Estúdio desligado (HABBLAUD_STUDIO=1)') });
@@ -607,7 +607,13 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
           req.resume();
           if (job[2] === 'discard' ? studio.discard(id) : studio.retry(id)) sendJson(res, 200, { ok: true });
           else sendJson(res, 404, { error: tr('pedido desconhecido (já aprovado ou descartado?)') });
-        } else readJson(req, 64 * 1024).then((body) => reply(studio.approve(id, body)), (err) => fail(res, err));
+        } else if (job[2] === 'revise')
+          readJson(req, 16 * 1024).then((body) => {
+            const r = studio.revise(id, body);
+            if ('ok' in r) sendJson(res, 200, r);
+            else sendJson(res, 409, { error: r.error });
+          }, (err) => fail(res, err));
+        else readJson(req, 64 * 1024).then((body) => reply(studio.approve(id, body)), (err) => fail(res, err));
       } else if (path.startsWith('/api/studio/file/') && isRead) {
         let rel = '';
         try {

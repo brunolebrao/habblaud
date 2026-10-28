@@ -294,7 +294,23 @@ const spawn = spawnOn
 // Estúdio (opcional): no Docker quem gera é o auxiliar do host; no Node, o servidor, se achar o Codex.
 const studioCodex = config.studio && !config.inDocker ? findCodexBin(process.env) : undefined;
 const studio = config.studio
-  ? new StudioService({ root: config.studioDir, stateFile: join(config.dataDir, 'studio.json'), generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir }) : undefined })
+  ? new StudioService({
+      root: config.studioDir,
+      stateFile: join(config.dataDir, 'studio.json'),
+      generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir }) : undefined,
+      // "Pedir ajuste": o comentário vai à sessão que escreveu o pedido, pelas mensagens do escritório.
+      notify: (session, text) => {
+        if (!messages) return { error: tr('mensagens pelo escritório desligadas: peça o ajuste direto ao agente') };
+        const agent = office.list().find((a) => a.sessionId === session && !a.id.startsWith(`${session}:`));
+        if (!agent) return { error: tr('o agente que fez o pedido não está mais no escritório') };
+        try {
+          const r = messages.send({ agentId: agent.id, text });
+          return 'message' in r ? { ok: true } : { error: 'reason' in r && r.reason ? r.reason : tr('não deu para mandar a mensagem ao agente') };
+        } catch (err) {
+          return { error: (err as Error).message };
+        }
+      },
+    })
   : undefined;
 // Ditado: no Docker quem transcreve é o auxiliar do host; no Node, o servidor, se achar o Whisper local.
 const whisper = config.messages && !config.inDocker ? findWhisper() : undefined;

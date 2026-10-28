@@ -11636,3 +11636,9 @@ a.ui-link__badge:hover {
 .ui-studio__hint {
   margin: 10px 14px 0;
 }
+
+.ui-studio__note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

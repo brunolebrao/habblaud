@@ -148,6 +148,20 @@ describe('StudioService', () => {
     expect(s.submit({ project: 'p', prompt: 'x' }, { direct: true })).toMatchObject({ job: { status: 'queued' } });
   });
 
+  it('pedir ajuste: o comentário vai à sessão do agente e o pedido sai da lista', () => {
+    const sent: Array<[string, string]> = [];
+    const s = svc({ notify: (session, text) => (sent.push([session, text]), { ok: true }) });
+    s.submit({ project: 'p', title: 'Vaso', prompt: 'um vaso', session: '00ecdadc-2c4f-4679' });
+    s.submit({ project: 'p', prompt: 'sem sessão' });
+    expect(s.revise('j1', { note: '' })).toMatchObject({ error: expect.any(String) });
+    expect(s.revise('j2', { note: 'mais fofo' })).toMatchObject({ error: expect.any(String) });
+    expect(s.revise('j1', { note: 'mais fofo' })).toEqual({ ok: true });
+    expect(sent[0]![0]).toBe('00ecdadc-2c4f-4679');
+    expect(sent[0]![1]).toContain('mais fofo');
+    expect(sent[0]![1]).toContain('um vaso');
+    expect(s.jobs().map((j) => j.id)).toEqual(['j2']);
+  });
+
   it('falhou: tentar de novo volta a esperar você', () => {
     const s = svc();
     s.poll();

@@ -31,6 +31,8 @@ const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'imag
 const FILE_MAX_BYTES = 25 * 1024 * 1024;
 const REL_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const SESSION_RE = /^[\w-]{8,80}$/;
+const NOTE_MAX = 2_000;
 
 export type StudioJobStatus = 'pending' | 'queued' | 'sent' | 'done' | 'failed';
 
@@ -44,6 +46,8 @@ export interface StudioJob {
   at: number;
   /** Quem pediu (o agente diz o próprio nome; só para mostrar). Ausente = o painel. */
   requestedBy?: string;
+  /** Sessão do agente que pediu (CLAUDE_CODE_SESSION_ID): para onde vai o "Pedir ajuste". */
+  session?: string;
   file?: string;
   error?: string;
 }
@@ -84,6 +88,8 @@ export interface StudioServiceOptions {
   generator?: StudioGenerator;
   now?: () => number;
   newId?: () => string;
+  /** Leva um texto à sessão de um agente (mensagens pelo escritório). Ausente = sem "Pedir ajuste". */
+  notify?: (session: string, text: string) => { ok: true } | { error: string };
 }
 
 export type StudioSubmit = { job: StudioJob } | { error: 'invalid' | 'unavailable' | 'too-many' | 'unknown'; reason: string };
@@ -102,6 +108,7 @@ function readMeta(path: string): Record<string, unknown> {
   }
 }
 
+const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
 const str = (v: unknown, max = 4_000): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
 
 /** O prompt que vai ao Codex: o pedido mais o guia de estilo do projeto. */
@@ -238,6 +245,7 @@ export class StudioService {
     if ('error' in req) return { error: 'invalid', reason: req.error };
     const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
     const requestedBy = opts.direct ? undefined : (str(r.requestedBy, BY_MAX) ?? tr('um agente'));
+    const session = !opts.direct && typeof r.session === 'string' && SESSION_RE.test(r.session) ? r.session : undefined;
     if (opts.direct) {
       const busy = this.busy();
       if (busy) return busy;
@@ -248,7 +256,7 @@ export class StudioService {
       if (this.projectsBySlug.size >= MAX_PROJECTS) return { error: 'too-many', reason: tr('projetos demais') };
       this.projectsBySlug.set(req.project, { slug: req.project, name: req.project, updatedAt: this.now() });
     }
-    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}) };
+    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
     const entry: Entry = { job, touched: this.now() };
     this.entries.set(job.id, entry);
     if (opts.direct) this.start(entry);
@@ -271,6 +279,31 @@ export class StudioService {
     this.start(e);
     this.save();
     return { job: { ...e.job } };
+  }
+
+  /** Pede ao agente que escreveu o pedido uma nova versão (com o seu comentário); o pedido antigo sai da lista. */
+  revise(id: string, raw: unknown): { ok: true } | { error: string } {
+    const e = this.entries.get(id);
+    if (!e || (e.job.status !== 'pending' && e.job.status !== 'failed')) return { error: tr('pedido desconhecido (já aprovado ou descartado?)') };
+    const note = str(rec(raw).note, NOTE_MAX + 1);
+    if (!note) return { error: tr('escreva o que ajustar') };
+    if (note.length > NOTE_MAX) return { error: tr('comentário longo demais (até {0} caracteres)', [NOTE_MAX]) };
+    if (!e.job.session || !this.opts.notify) return { error: tr('este pedido não diz de qual conversa veio: peça o ajuste direto ao agente') };
+    const j = e.job;
+    const text = [
+      tr('Ajuste pedido no Estúdio para a imagem "{0}" (projeto {1}):', [j.title, j.project]),
+      note,
+      '',
+      tr('Prompt atual:'),
+      j.prompt,
+      '',
+      tr('Mande uma nova versão com POST /api/studio (mesmo project e session); este pedido saiu da lista.'),
+    ].join('\n');
+    const sent = this.opts.notify(e.job.session, text);
+    if ('error' in sent) return sent;
+    this.entries.delete(id);
+    this.save();
+    return { ok: true };
   }
 
   /** Pedido que falhou volta a esperar você (para conferir e gerar de novo). */
@@ -389,7 +422,8 @@ export class StudioService {
       const req = parseStudioRequest(x);
       if ('error' in req || typeof x.id !== 'string') continue;
       const by = str(x.requestedBy, BY_MAX);
-      this.entries.set(x.id, { job: { id: x.id, ...req, status: 'pending', at: Number(x.at) || this.now(), ...(by ? { requestedBy: by } : {}) }, touched: this.now() });
+      const session = typeof x.session === 'string' && SESSION_RE.test(x.session) ? x.session : undefined;
+      this.entries.set(x.id, { job: { id: x.id, ...req, status: 'pending', at: Number(x.at) || this.now(), ...(by ? { requestedBy: by } : {}), ...(session ? { session } : {}) }, touched: this.now() });
     }
   }
 
