@@ -49,7 +49,7 @@ export function parsePeers(raw: unknown): { file: PeersFile; warnings: string[] 
     if (!HOST_ID.test(id)) bad(tr('"id" precisa ter só minúsculas, dígitos e hífen'));
     else if (seen.has(id)) bad(tr('"id" repetido'));
     else if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:')) bad(tr('"url" precisa ser um endereço http(s)'));
-    else if (url.protocol === 'https:' && !(typeof p.ca === 'string' && p.ca.includes('BEGIN CERTIFICATE'))) bad(tr('falta "ca" (a CA de lá, em ~/.habblaud/remote-tls/server/ca.crt)'))
+    else if (url.protocol === 'https:' && !(typeof p.ca === 'string' && p.ca.includes('BEGIN CERTIFICATE'))) bad(tr('falta "ca" (a CA de lá, em ~/.habblaud/remote-tls/server/ca.crt)'));
     else if (typeof p.user !== 'string' || !p.user || typeof p.password !== 'string' || !p.password) bad(tr('faltam "user" e "password"'));
     else {
       seen.add(id);
