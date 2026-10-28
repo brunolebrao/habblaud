@@ -38,7 +38,7 @@ describe('createCodexImageGenerator', () => {
       run: async (_bin, args, cwd) => {
         calls.push(args);
         writeFileSync(join(cwd, '134502-lebre.png'), PNG);
-        return { ok: true };
+        return { ok: true, output: '' };
       },
     });
     const out = await gen({ project: 'lebre-hq', prompt: 'lebre' });
@@ -49,7 +49,9 @@ describe('createCodexImageGenerator', () => {
     expect(readFileSync(join(root, 'lebre-hq/2026-10-28/134502-lebre.md'), 'utf8')).toBe('lebre\n');
   });
 
-  it('imagem só na pasta do Codex: copia a desta geração', async () => {
+  const SID = '019a2b3c-4d5e-6f70-8192-a3b4c5d6e7f8';
+
+  it('imagem só na pasta do Codex: copia a da sessão desta geração', async () => {
     const root = tmp();
     const codexHome = tmp();
     const gen = createCodexImageGenerator({
@@ -58,17 +60,33 @@ describe('createCodexImageGenerator', () => {
       codexHome,
       now,
       run: async () => {
-        mkdirSync(join(codexHome, 'generated_images', 's1'), { recursive: true });
-        writeFileSync(join(codexHome, 'generated_images', 's1', 'exec-1.png'), PNG);
-        return { ok: true };
+        mkdirSync(join(codexHome, 'generated_images', SID), { recursive: true });
+        writeFileSync(join(codexHome, 'generated_images', SID, 'exec-1.png'), PNG);
+        return { ok: true, output: `model: gpt-6-luna\nsession id: ${SID}\n` };
       },
     });
     const out = await gen({ project: 'p', prompt: 'lebre' });
     expect(readFileSync(join(root, out.file))).toEqual(PNG);
   });
 
+  it('nunca copia a imagem de outra sessão do Codex', async () => {
+    const codexHome = tmp();
+    const gen = createCodexImageGenerator({
+      codexBin: '/bin/codex',
+      root: tmp(),
+      codexHome,
+      now,
+      run: async () => {
+        mkdirSync(join(codexHome, 'generated_images', 'outra'), { recursive: true });
+        writeFileSync(join(codexHome, 'generated_images', 'outra', 'exec-1.png'), PNG);
+        return { ok: true, output: `session id: ${SID}\n` };
+      },
+    });
+    await expect(gen({ project: 'p', prompt: 'x' })).rejects.toThrow();
+  });
+
   it('sem imagem: erro com o motivo do Codex', async () => {
-    const gen = createCodexImageGenerator({ codexBin: '/bin/codex', root: tmp(), codexHome: tmp(), now, run: async () => ({ ok: false, error: 'model not supported' }) });
+    const gen = createCodexImageGenerator({ codexBin: '/bin/codex', root: tmp(), codexHome: tmp(), now, run: async () => ({ ok: false, error: 'model not supported', output: '' }) });
     await expect(gen({ project: 'p', prompt: 'x' })).rejects.toThrow(/model not supported/);
   });
 });

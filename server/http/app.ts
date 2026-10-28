@@ -411,7 +411,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
           messages: !!deps.messages && trusted(req, 'messages'),
           terminal: !!terminals && trusted(req, 'terminal'),
           spawn: !!deps.spawn && trusted(req, 'spawn'),
-          ...(deps.studio ? { studio: trusted(req, 'spawn') } : {}),
+          ...(deps.studio ? { studio: trusted(req) } : {}),
           world: !!deps.world && !!deps.terminal && !remote && isLoopbackHost(req.headers.host),
         };
         sendJson(res, 200, access);
@@ -572,10 +572,10 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       return true;
     }
     if (path === '/api/studio' || path.startsWith('/api/studio/')) {
-      // O Estúdio roda o Codex (studio/generate.ts) e mostra arquivos do computador: a trava do "Novo agente".
+      // O Estúdio roda o Codex sem sandbox (studio/generate.ts): só pelo próprio computador, nunca pela porta remota.
       const studio = deps.studio;
       if (!studio) sendJson(res, 403, { error: tr('Estúdio desligado (HABBLAUD_STUDIO=1)') });
-      else if (!trusted(req, 'spawn')) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
+      else if (!trusted(req)) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
       else if (path === '/api/studio' && isRead) sendJson(res, 200, { available: studio.available(), jobs: studio.jobs(), items: studio.gallery() });
       else if (path === '/api/studio' && method === 'POST') {
         readJson(req, 64 * 1024)
