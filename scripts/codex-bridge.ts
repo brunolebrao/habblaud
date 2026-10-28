@@ -285,16 +285,18 @@ export async function dictationRound(post: Post, transcribe: Transcriber, log: (
 }
 
 /**
- * Estúdio: busca os pedidos de imagem (POST /api/host/studio/poll), gera cada um com o Codex (studio/generate.ts, na
- * pasta do Estúdio deste computador) e devolve o caminho da imagem em /api/host/studio/ack. O prompt nunca vai para a
- * tela. Nunca lança.
+ * Estúdio: busca os pedidos de imagem (POST /api/host/studio/poll) e gera cada um com o Codex (studio/generate.ts, na
+ * pasta do Estúdio deste computador) EM SEGUNDO PLANO, devolvendo o caminho da imagem em /api/host/studio/ack assim que
+ * ela fica pronta. A rodada não espera a geração (1 a 3 min): continua buscando, o que mantém o auxiliar presente e
+ * pega os pedidos seguintes (o servidor limita a 3 de uma vez). O prompt nunca vai para a tela. Nunca lança.
  */
-export async function studioRound(post: Post, generate: StudioGenerator, log: (line: string) => void = () => {}, opts: { wait?: boolean } = {}): Promise<RoundResult> {
+export async function studioRound(post: Post, generate: StudioGenerator, log: (line: string) => void = () => {}, opts: { wait?: boolean } = {}): Promise<RoundResult & { running?: Promise<void>[] }> {
   const polled = await post(`/api/host/studio/poll${opts.wait ? '?wait=1' : ''}`, {});
   if (!polled) return { state: 'down' };
   const list = rec(polled.json)?.jobs;
   if (polled.status !== 200 || !Array.isArray(list)) return { state: 'refused', status: polled.status };
   const results: Array<BridgeResult & { file?: string }> = [];
+  const running: Promise<void>[] = [];
   for (const raw of list) {
     const r = rec(raw);
     const id = typeof r?.id === 'string' ? r.id : '';
@@ -305,18 +307,22 @@ export async function studioRound(post: Post, generate: StudioGenerator, log: (l
       continue;
     }
     const started = Date.now();
-    try {
-      const out = await generate(req);
-      results.push({ id, ok: true, file: out.file });
-      log(tr('✓ imagem do Estúdio gerada ({0}, {1} s)', [req.project, Math.round((Date.now() - started) / 1000)]));
-    } catch (err) {
-      const error = (err as Error)?.message || tr('o Codex falhou');
-      results.push({ id, ok: false, error });
-      log(tr('✗ Estúdio: {0}', [error]));
-    }
+    running.push(
+      generate(req).then(
+        async (out) => {
+          log(tr('✓ imagem do Estúdio gerada ({0}, {1} s)', [req.project, Math.round((Date.now() - started) / 1000)]));
+          await post('/api/host/studio/ack', { results: [{ id, ok: true, file: out.file }] });
+        },
+        async (err) => {
+          const error = (err as Error)?.message || tr('o Codex falhou');
+          log(tr('✗ Estúdio: {0}', [error]));
+          await post('/api/host/studio/ack', { results: [{ id, ok: false, error }] });
+        },
+      ).catch(() => {}),
+    );
   }
   if (results.length) await post('/api/host/studio/ack', { results });
-  return { state: 'ok', results };
+  return { state: 'ok', results, running };
 }
 
 /**

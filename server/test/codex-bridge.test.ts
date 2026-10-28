@@ -6,7 +6,7 @@ import { mkdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkMessage, dictationRound, filesRound, httpPost, parseArgs, round, spawnRound, type Post } from '../../scripts/codex-bridge';
+import { checkMessage, dictationRound, filesRound, httpPost, parseArgs, round, spawnRound, studioRound, type Post } from '../../scripts/codex-bridge';
 import { spawnUrl } from '../spawn/spawn';
 import { AccountsService } from '../accounts/service';
 import { createApiHandler } from '../http/app';
@@ -278,5 +278,22 @@ describe('spawnRound (agentes novos pelo auxiliar)', () => {
   it('Habblaud fora do ar ou recusando', async () => {
     expect(await spawnRound(async () => null, async () => ({ ok: true }))).toEqual({ state: 'down' });
     expect(await spawnRound(async () => ({ status: 403, json: { error: 'x' } }), async () => ({ ok: true }))).toEqual({ state: 'refused', status: 403 });
+  });
+});
+
+describe('studioRound', () => {
+  it('não espera a geração: devolve logo e manda o ack de cada imagem quando fica pronta', async () => {
+    const posts: Array<[string, unknown]> = [];
+    let finish: (v: { file: string }) => void = () => {};
+    const post: Post = async (path, body) => {
+      posts.push([path, body]);
+      return path.startsWith('/api/host/studio/poll') ? { status: 200, json: { jobs: [{ id: 'a', project: 'p', title: 't', prompt: 'x' }] } } : { status: 200, json: {} };
+    };
+    const r = await studioRound(post, () => new Promise((ok) => (finish = ok)));
+    expect(r.state).toBe('ok');
+    expect(posts.map((p) => p[0])).toEqual(['/api/host/studio/poll']);
+    finish({ file: 'p/2026-10-28/a.png' });
+    await Promise.all(r.running ?? []);
+    expect(posts[1]).toEqual(['/api/host/studio/ack', { results: [{ id: 'a', ok: true, file: 'p/2026-10-28/a.png' }] }]);
   });
 });
