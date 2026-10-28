@@ -8,7 +8,7 @@
 // o Codex roda numa pasta só do Estúdio, com um pedido fixo (gerar e salvar uma imagem, nada mais), sem shell
 // (execFile) e com prazo. O Estúdio é opcional (HABBLAUD_STUDIO=1). Node puro: também é importado pelo auxiliar.
 import { execFile } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { tr } from '../../shared/i18n';
@@ -227,12 +227,18 @@ export function writeProjectGuides(root: string, projects: unknown): void {
     if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(slug)) continue;
     const str = (k: string) => (typeof r?.[k] === 'string' && (r[k] as string).trim() ? (r[k] as string).trim() : undefined);
     const text = projectGuide({ slug, name: str('name') ?? slug, description: str('description'), style: str('style') });
-    const file = join(root, slug, 'CLAUDE.md');
+    const dir = join(root, slug);
+    const file = join(dir, 'CLAUDE.md');
     try {
+      // Nunca seguir links: a pasta e o arquivo têm de ser de verdade e dentro da raiz.
+      if (existsSync(dir) && (lstatSync(dir).isSymbolicLink() || !realpathSync(dir).startsWith(`${realpathSync(root)}/`))) continue;
+      if (existsSync(file) && !lstatSync(file).isFile()) continue;
       const old = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
       if (old === text || (old !== undefined && !old.startsWith(GUIDE_MARK))) continue;
-      mkdirSync(join(root, slug), { recursive: true });
-      writeFileSync(file, text);
+      mkdirSync(dir, { recursive: true });
+      const tmp = join(dir, `.CLAUDE.md.${process.pid}.tmp`);
+      writeFileSync(tmp, text, { flag: 'wx' });
+      renameSync(tmp, file);
     } catch {
       // pasta sem permissão: a agente só não terá o guia
     }

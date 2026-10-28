@@ -661,6 +661,7 @@ describe('Estúdio pela porta remota', () => {
     expect(body).toMatchObject({ readOnly: true, available: false, jobs: [] });
     expect(body.items.map((i: { file: string }) => i.file)).toEqual(['p/2026-10-28/a.png']);
     expect(body.projects[0].pending).toBe(0);
+    expect(body.projects[0].folder).toBeUndefined();
     expect((await request(s.remoteBase, '/api/studio/file/p/2026-10-28/a.png', { headers })).status).toBe(200);
     for (const [method, path] of [['POST', '/api/studio'], ['POST', '/api/studio/projects'], ['POST', '/api/studio/jobs/x/approve'], ['GET', '/api/studio/jobs/x']]) {
       expect((await request(s.remoteBase, path, { method, headers, body: method === 'POST' ? {} : undefined })).status, `${method} ${path}`).toBe(403);

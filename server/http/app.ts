@@ -587,7 +587,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       else if (!trusted(req, 'studio') && !viewOnly) sendJson(res, 403, { error: denied(req, tr('o Estúdio só abre pelo próprio computador (http://localhost)')) });
       else if (path === '/api/studio' && isRead) {
         const project = url.searchParams.get('project') ?? undefined;
-        if (viewOnly) sendJson(res, 200, { available: false, readOnly: true, projects: studio.projects().map((p) => ({ ...p, pending: 0 })), jobs: [], items: studio.gallery(project) });
+        if (viewOnly) sendJson(res, 200, { available: false, readOnly: true, projects: studio.projects().map(({ folder: _folder, ...p }) => ({ ...p, pending: 0 })), jobs: [], items: studio.gallery(project) });
         else sendJson(res, 200, { available: studio.available(), projects: studio.projects(), jobs: studio.jobs(project), items: studio.gallery(project) });
       } else if (path === '/api/studio' && method === 'POST') {
         readJson(req, 64 * 1024).then((body) => reply(studio.submit(body, { direct: fromPanel }), true), (err) => fail(res, err));

@@ -315,6 +315,10 @@ describe('agente do projeto (CLAUDE.md da pasta)', () => {
     writeProjectGuides(root, [{ slug: 'funko', name: 'Bases Funko', style: 'azul' }]);
     expect(readFileSync(join(root, 'funko/CLAUDE.md'), 'utf8')).toBe('meu guia');
     expect(projectGuide({ slug: 'p', name: 'P' })).toContain('Sem guia de estilo');
+    const out = tmp();
+    symlinkSync(out, join(root, 'link'));
+    writeProjectGuides(root, [{ slug: 'link', name: 'L' }]);
+    expect(existsSync(join(out, 'CLAUDE.md'))).toBe(false);
   });
 
   it('cada projeto informa a pasta como o host a vê', () => {
