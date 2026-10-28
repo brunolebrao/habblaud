@@ -56,7 +56,8 @@ export function reviewLabel(url: string): string | undefined {
   const pr = /^\/[^/]+\/[^/]+\/pull\/(\d+)(?:\/|$)/.exec(u.pathname);
   if (pr && /(^|\.)github\.com$/.test(u.hostname)) return `PR #${pr[1]}`;
   const mr = /\/-\/merge_requests\/(\d+)(?:\/|$)/.exec(u.pathname);
-  if (mr) return `MR !${mr[1]}`;
+  // GitLab próprio de uma empresa: o domínio vai junto (o selo nunca esconde para onde o link leva).
+  if (mr) return u.hostname === 'gitlab.com' ? `MR !${mr[1]}` : `MR !${mr[1]} · ${u.hostname}`;
   return undefined;
 }
 
@@ -69,6 +70,14 @@ export function shortUrl(url: string): string {
     return tail ? `${u.hostname}/${tail}` : u.hostname;
   } catch {
     return url;
+  }
+}
+
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
   }
 }
 
@@ -98,8 +107,11 @@ export function linkNode(url: string, text?: string): HTMLElement {
     'ui-icon-btn--sm ui-link__copy',
   );
   copy.setAttribute('data-chrome', '');
+  // Texto do link diferente do endereço (markdown "[texto](url)"): o domínio de verdade aparece ao lado.
+  const host = !badgeOnly && text && text !== url ? hostOf(url) : undefined;
+  const hostEl = host && !text!.startsWith(host) ? h('span', { class: 'ui-link__host', text: ` (${host})`, attrs: { 'data-chrome': '' } }) : null;
   const badge = label && !badgeOnly ? h('span', { class: 'ui-link__badge', text: label, attrs: { 'data-chrome': '' } }) : null;
-  return h('span', { class: `ui-link${label ? ' ui-link--review' : ''}` }, ...(badge ? [badge] : []), a, copy);
+  return h('span', { class: `ui-link${label ? ' ui-link--review' : ''}` }, ...(badge ? [badge] : []), a, ...(hostEl ? [hostEl] : []), copy);
 }
 
 /** Acrescenta o texto com os endereços já como links. */

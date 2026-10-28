@@ -11276,3 +11276,8 @@ a.ui-link__badge:hover {
   grid-column: 2 / -1;
   font-size: 11px;
 }
+
+.ui-link__host {
+  color: var(--ui-faint);
+  font-size: 0.9em;
+}
