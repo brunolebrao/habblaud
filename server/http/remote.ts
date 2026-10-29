@@ -12,6 +12,7 @@
 //                           studio (gerar e aprovar no Estúdio; sem ele, a galeria só para ver), rooms (renomear
 //                           salas e editar personagens) ("none" = só ver).
 //                           Padrão: permissions.
+//   HABBLAUD_REMOTE_TOTP_SECRET segundo fator: código de 6 dígitos de app autenticador (base32; npm run remote:totp)
 //   HABBLAUD_REMOTE_TLS_DIR pasta com server.key, server.crt (e ca.crt, servido em /remote/ca.crt). Padrão:
 //                           /remote-tls no Docker, ~/.habblaud/remote-tls/server no Node. Sem certificado a porta não
 //                           sobe, a menos que HABBLAUD_REMOTE_INSECURE_HTTP=1 (HTTP puro: senha e cookie à vista na rede).
@@ -28,6 +29,7 @@ import net from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parsePasswordHash, verifyPassword, type PasswordHash } from '../remote/password';
+import { parseTotpSecret, verifyTotp } from '../remote/totp';
 import { hostAllowed } from './guard';
 import { getLocale, tr } from '../../shared/i18n';
 
@@ -50,6 +52,10 @@ export interface RemoteConfig {
   /** Texto do hash como veio do ambiente (entra na chave das sessões). */
   passwordHashText: string;
   allow: ReadonlySet<RemoteFeature>;
+  /** Segundo fator (HABBLAUD_REMOTE_TOTP_SECRET): chave do código de 6 dígitos. Ausente = só usuário e senha. */
+  totp?: Buffer;
+  /** Texto do segredo como veio do ambiente (entra na chave das sessões: ligar o código encerra os logins antigos). */
+  totpText?: string;
   /** Ausente = HTTP puro (só com HABBLAUD_REMOTE_INSECURE_HTTP=1). */
   tls?: RemoteTls;
 }
@@ -83,6 +89,9 @@ export function parseRemoteConfig(
   if (!user || !hashText) return { warning: tr('acesso remoto desligado: faltam HABBLAUD_REMOTE_USER e HABBLAUD_REMOTE_PASSWORD_HASH; rode npm run remote:setup') };
   const passwordHash = parsePasswordHash(hashText);
   if (!passwordHash) return { warning: tr('acesso remoto desligado: HABBLAUD_REMOTE_PASSWORD_HASH inválido; rode npm run remote:setup') };
+  const totpText = env.HABBLAUD_REMOTE_TOTP_SECRET?.trim() || undefined;
+  const totp = parseTotpSecret(totpText);
+  if (totpText && !totp) return { warning: tr('acesso remoto desligado: HABBLAUD_REMOTE_TOTP_SECRET inválido; rode npm run remote:totp') };
   const dir = defaultTlsDir(env, inDocker);
   const tls: RemoteTls = { dir, keyFile: join(dir, 'server.key'), certFile: join(dir, 'server.crt'), caFile: join(dir, 'ca.crt') };
   const hasTls = exists(tls.keyFile) && exists(tls.certFile);
@@ -92,7 +101,16 @@ export function parseRemoteConfig(
   const port = inDocker ? DEFAULT_REMOTE_PORT : Number.isInteger(rawPort) && rawPort > 0 && rawPort < 65536 ? rawPort : DEFAULT_REMOTE_PORT;
   const host = inDocker ? '0.0.0.0' : env.HABBLAUD_REMOTE_HOST?.trim() || '0.0.0.0';
   return {
-    config: { port, host, user, passwordHash, passwordHashText: hashText, allow: parseAllow(env.HABBLAUD_REMOTE_ALLOW), tls: hasTls ? tls : undefined },
+    config: {
+      port,
+      host,
+      user,
+      passwordHash,
+      passwordHashText: hashText,
+      allow: parseAllow(env.HABBLAUD_REMOTE_ALLOW),
+      ...(totp ? { totp, totpText } : {}),
+      tls: hasTls ? tls : undefined,
+    },
   };
 }
 
@@ -136,12 +154,13 @@ export class RemoteSessions {
 
   constructor(
     secret: Buffer,
-    cfg: Pick<RemoteConfig, 'user' | 'passwordHashText'>,
+    cfg: Pick<RemoteConfig, 'user' | 'passwordHashText' | 'totpText'>,
     private readonly now: () => number = Date.now,
     /** Onde a lista de tokens encerrados sobrevive a reinícios (ausente = só em memória). */
     private readonly revokedFile?: string,
   ) {
-    this.key = createHmac('sha256', secret).update(`${cfg.user}\0${cfg.passwordHashText}`, 'utf8').digest();
+    const totp = cfg.totpText ? `\0${cfg.totpText}` : '';
+    this.key = createHmac('sha256', secret).update(`${cfg.user}\0${cfg.passwordHashText}${totp}`, 'utf8').digest();
     this.loadRevoked();
   }
 
@@ -302,7 +321,7 @@ function esc(text: string): string {
 }
 
 /** `brandName`: marca própria (server/brand.ts) no lugar de "Habblaud" no título e no cabeçalho. */
-export function loginPage(opts: { caDownload: boolean; brandName?: string }): string {
+export function loginPage(opts: { caDownload: boolean; brandName?: string; totp?: boolean }): string {
   const name = opts.brandName ?? 'Habblaud';
   const ca = opts.caDownload
     ? `<p class="ca">${esc(tr('Primeira vez neste celular?'))} <a href="${CA_PATH}" download="habblaud-ca.crt">${esc(tr('Instale o certificado do Habblaud'))}</a> ${esc(tr('para tirar o aviso de segurança (confira a impressão digital que o npm run remote:setup mostrou).'))}</p>`
@@ -350,7 +369,13 @@ export function loginPage(opts: { caDownload: boolean; brandName?: string }): st
   <input id="u" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
   <label for="p">${esc(tr('Senha'))}</label>
   <input id="p" name="password" type="password" autocomplete="current-password" required>
-  <button id="b" type="submit">${esc(tr('Entrar'))}</button>
+${
+  opts.totp
+    ? `  <label for="c">${esc(tr('Código do app autenticador'))}</label>
+  <input id="c" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code" required>
+`
+    : ''
+}  <button id="b" type="submit">${esc(tr('Entrar'))}</button>
   <div id="err" role="alert"></div>
   ${ca}
 </form>
@@ -361,7 +386,7 @@ export function loginPage(opts: { caDownload: boolean; brandName?: string }): st
     b.disabled = true; err.textContent = '';
     try {
       const r = await fetch('/api/remote/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin', body: JSON.stringify({ user: f.username.value, password: f.password.value }) });
+        credentials: 'same-origin', body: JSON.stringify({ user: f.username.value, password: f.password.value, code: f.code ? f.code.value : undefined }) });
       if (r.ok) { location.replace('/'); return; }
       const body = await r.json().catch(() => ({}));
       err.textContent = body.error || ${js(tr('Não deu para entrar.'))};
@@ -391,8 +416,10 @@ function cookieHeader(value: string, maxAgeS: number, secure: boolean): string {
 }
 
 export interface RemoteGateDeps {
-  config: Pick<RemoteConfig, 'user' | 'passwordHash'>;
+  config: Pick<RemoteConfig, 'user' | 'passwordHash' | 'totp'>;
   sessions: RemoteSessions;
+  /** Relógio do código de 6 dígitos (injetável nos testes). */
+  now?: () => number;
   /** Cookie com Secure (a porta fala HTTPS). */
   secure: boolean;
   /** Arquivo da CA pública servido em /remote/ca.crt (ausente = sem download). */
@@ -412,6 +439,9 @@ export function createRemoteGate(deps: RemoteGateDeps): (req: IncomingMessage, r
   const throttle = deps.throttle ?? new LoginThrottle();
   const verify = deps.verify ?? verifyPassword;
   const caAvailable = () => !!deps.caFile && existsSync(deps.caFile);
+  const now = deps.now ?? Date.now;
+  /** Último passo do código aceito: o mesmo código não serve para um segundo login. */
+  let lastStep = -1;
   return (req, res, url) => {
     const path = url.pathname;
     const method = req.method ?? 'GET';
@@ -439,7 +469,7 @@ export function createRemoteGate(deps: RemoteGateDeps): (req: IncomingMessage, r
         .then(async (raw) => {
           if (!throttle.begin()) return tooMany();
           begun = true;
-          let body: { user?: unknown; password?: unknown } = {};
+          let body: { user?: unknown; password?: unknown; code?: unknown } = {};
           try {
             body = JSON.parse(raw) as typeof body;
           } catch {
@@ -451,6 +481,11 @@ export function createRemoteGate(deps: RemoteGateDeps): (req: IncomingMessage, r
           const okPassword = await verify(password, deps.config.passwordHash);
           const okUser = safeEqual(user.trim(), deps.config.user);
           if (!(okUser && okPassword)) return sendJson(res, 401, { error: tr('Usuário ou senha incorretos.') });
+          if (deps.config.totp) {
+            const step = verifyTotp(deps.config.totp, typeof body.code === 'string' ? body.code : '', now());
+            if (step === undefined || step <= lastStep) return sendJson(res, 401, { error: tr('Código do app autenticador incorreto ou vencido.') });
+            lastStep = step;
+          }
           ok = true;
           const { token, maxAgeS } = deps.sessions.issue();
           sendJson(res, 200, { ok: true }, { 'Set-Cookie': cookieHeader(token, maxAgeS, deps.secure) });
@@ -497,7 +532,7 @@ export function createRemoteGate(deps: RemoteGateDeps): (req: IncomingMessage, r
       if (authed) {
         res.writeHead(302, { Location: '/', 'Cache-Control': 'no-store' });
         res.end();
-      } else sendHtml(res, loginPage({ caDownload: caAvailable(), brandName: deps.brandName }));
+      } else sendHtml(res, loginPage({ caDownload: caAvailable(), brandName: deps.brandName, totp: !!deps.config.totp }));
       return true;
     }
 
