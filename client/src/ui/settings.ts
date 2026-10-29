@@ -278,6 +278,8 @@ export class SettingsPopover implements UiComponent {
 
   private async logout(): Promise<void> {
     this.logoutBtn.disabled = true;
+    // Saindo, este aparelho para de receber os avisos (o servidor também o apaga quando o login deixa de valer).
+    await disablePush().catch(() => {});
     if (!(await remoteLogout())) {
       this.logoutBtn.disabled = false;
       this.ctx.announce(tr('Não foi possível sair: sem resposta do servidor.'));

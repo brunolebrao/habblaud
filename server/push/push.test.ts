@@ -103,3 +103,27 @@ describe('PushService', () => {
     tmp.cleanup();
   });
 });
+
+describe('PushService e o login remoto', () => {
+  it('aparelho cadastrado pela porta remota sai quando o login deixa de valer; o da porta local fica', async () => {
+    const tmp = tempDir();
+    const valid = new Set(['tok-a']);
+    const sent: string[] = [];
+    const fakeFetch = (async (url: string) => {
+      sent.push(url);
+      return new Response(null, { status: 201 });
+    }) as unknown as typeof fetch;
+    const svc = new PushService({ file: join(tmp.dir, 'push.json'), keysFile: join(tmp.dir, 'k.json'), fetch: fakeFetch, sessionValid: (t) => valid.has(t) });
+    const remote = device('https://fcm.googleapis.com/fcm/send/r');
+    const local = device('https://fcm.googleapis.com/fcm/send/l');
+    svc.subscribe(remote.sub, 'tok-a');
+    svc.subscribe(local.sub);
+    expect(await svc.send({ title: 'T', body: 'B' })).toBe(2);
+    valid.delete('tok-a');
+    sent.length = 0;
+    expect(await svc.send({ title: 'T', body: 'B' })).toBe(1);
+    expect(sent).toEqual([local.sub.endpoint]);
+    expect(svc.has(remote.sub.endpoint)).toBe(false);
+    tmp.cleanup();
+  });
+});

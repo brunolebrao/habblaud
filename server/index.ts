@@ -166,6 +166,10 @@ const hub = new Hub(office, {
   peers,
   canAnswer: (req) => (isRemoteRequest(req) ? !!config.remote?.allow.has('permissions') : isLoopbackHost(req.headers.host)),
 });
+// Logins da porta remota (http/remote.ts): também dizem se um aparelho cadastrado nos avisos ainda vale.
+const remoteSessions = config.remote
+  ? new RemoteSessions(loadSecret(join(config.dataDir, 'remote-secret')), config.remote, Date.now, join(config.dataDir, 'remote-revoked.json'))
+  : undefined;
 // Avisos no celular (Web Push): ligados por padrão; só mandam algo depois que um aparelho se cadastra. HABBLAUD_PUSH=0 desliga.
 const pushFlag = process.env.HABBLAUD_PUSH?.trim();
 const push = pushFlag && !isTruthy(pushFlag)
@@ -175,6 +179,7 @@ const push = pushFlag && !isTruthy(pushFlag)
       keysFile: join(config.dataDir, 'push-vapid.json'),
       subject: process.env.HABBLAUD_PUSH_CONTACT?.trim() || undefined,
       warn: (text) => log.warn(text),
+      sessionValid: (token) => !!remoteSessions?.verify(token),
     });
 if (push) {
   hub.onNotice((n) => {
@@ -548,7 +553,7 @@ if (config.remote) {
   const remote = config.remote;
   const gate = createRemoteGate({
     config: remote,
-    sessions: new RemoteSessions(loadSecret(join(config.dataDir, 'remote-secret')), remote, Date.now, join(config.dataDir, 'remote-revoked.json')),
+    sessions: remoteSessions!,
     secure: !!remote.tls,
     caFile: remote.tls?.caFile,
     brandName: brandLoad.brand?.name,

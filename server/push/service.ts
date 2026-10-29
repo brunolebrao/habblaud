@@ -19,6 +19,8 @@ export interface PushMessage {
 
 interface Stored extends PushSubscription {
   at: number;
+  /** Login remoto que cadastrou o aparelho (cookie da porta remota). Ausente = pela porta local. */
+  session?: string;
 }
 
 export const MAX_SUBSCRIPTIONS = 20;
@@ -32,6 +34,11 @@ export interface PushServiceOptions {
   fetch?: typeof fetch;
   now?: () => number;
   warn?: (text: string) => void;
+  /**
+   * O login remoto ainda vale? Aparelho cadastrado pela porta remota só recebe enquanto o login dele valer: "Sair",
+   * login vencido, senha ou código trocados apagam o aparelho no próximo envio.
+   */
+  sessionValid?: (session: string) => boolean;
 }
 
 function isSubscription(v: unknown): v is PushSubscription {
@@ -75,7 +82,12 @@ export class PushService {
     this.vapid = keys;
     try {
       const list: unknown = JSON.parse(readFileSync(opts.file, 'utf8'));
-      if (Array.isArray(list)) this.subs = list.filter(isSubscription).map((s) => ({ endpoint: s.endpoint, keys: s.keys, at: Number((s as Stored).at) || 0 }));
+      if (Array.isArray(list)) {
+        this.subs = list.filter(isSubscription).map((s) => {
+          const session = (s as Stored).session;
+          return { endpoint: s.endpoint, keys: s.keys, at: Number((s as Stored).at) || 0, ...(typeof session === 'string' ? { session } : {}) };
+        });
+      }
     } catch {
       // nenhum aparelho ainda
     }
@@ -94,10 +106,10 @@ export class PushService {
   }
 
   /** Grava o aparelho (o mesmo endpoint troca as chaves). false = assinatura inválida. */
-  subscribe(raw: unknown): boolean {
+  subscribe(raw: unknown, session?: string): boolean {
     if (!isSubscription(raw)) return false;
     this.subs = this.subs.filter((s) => s.endpoint !== raw.endpoint);
-    this.subs.push({ endpoint: raw.endpoint, keys: { p256dh: raw.keys.p256dh, auth: raw.keys.auth }, at: (this.opts.now ?? Date.now)() });
+    this.subs.push({ endpoint: raw.endpoint, keys: { p256dh: raw.keys.p256dh, auth: raw.keys.auth }, at: (this.opts.now ?? Date.now)(), ...(session ? { session } : {}) });
     // O mais antigo sai quando passa do limite.
     while (this.subs.length > MAX_SUBSCRIPTIONS) this.subs.shift();
     this.save();
@@ -114,9 +126,11 @@ export class PushService {
   /** Manda a todos os aparelhos (ou só a um endpoint); apaga os que o serviço diz que não valem mais. */
   async send(msg: PushMessage, only?: string): Promise<number> {
     const payload = { ...msg, title: msg.title.slice(0, 120), body: msg.body.slice(0, TEXT_MAX) };
-    const targets = only ? this.subs.filter((s) => s.endpoint === only) : [...this.subs];
-    let sent = 0;
     const gone: string[] = [];
+    const valid = this.opts.sessionValid;
+    for (const s of this.subs) if (s.session !== undefined && !valid?.(s.session)) gone.push(s.endpoint);
+    const targets = this.subs.filter((s) => !gone.includes(s.endpoint) && (!only || s.endpoint === only));
+    let sent = 0;
     await Promise.all(
       targets.map(async (s) => {
         try {

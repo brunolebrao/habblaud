@@ -9,7 +9,7 @@ import type { Office } from '../model/office';
 import type { CodexLive } from '../sources/codex/live';
 import type { SessionLookup } from '../sources/source';
 import { isJsonContentType, isLoopbackHost } from './guard';
-import type { RemoteFeature } from './remote';
+import { COOKIE as REMOTE_COOKIE, readCookie, type RemoteFeature } from './remote';
 import { handleSessionsRoute } from './sessions';
 import type { Hub } from './sse';
 import { handleStatsRoute } from './stats';
@@ -785,7 +785,9 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
           .then(async (body) => {
             const b = (body ?? {}) as { subscription?: unknown; endpoint?: unknown };
             if (path === '/api/push/subscribe') {
-              if (!push.subscribe(b.subscription)) throw new HttpError(400, tr('assinatura de push inválida'));
+              // Pela porta remota, o aparelho fica ligado ao login (sai junto com ele).
+              const session = isRemote(req) ? readCookie(req.headers.cookie, REMOTE_COOKIE) : undefined;
+              if (!push.subscribe(b.subscription, session)) throw new HttpError(400, tr('assinatura de push inválida'));
               sendJson(res, 200, { ok: true, devices: push.count() });
             } else if (path === '/api/push/unsubscribe') {
               push.unsubscribe(b.endpoint);
