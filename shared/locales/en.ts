@@ -3483,7 +3483,6 @@ export const EN: Readonly<Record<string, string>> = {
   "falta a chave do 3D AI Studio: ponha HABBLAUD_3DAI_KEY no .env do Habblaud e reinicie o auxiliar": "missing the 3D AI Studio key: put HABBLAUD_3DAI_KEY in Habblaud's .env and restart the helper",
   "acesso remoto desligado: HABBLAUD_REMOTE_TOTP_SECRET inválido; rode npm run remote:totp": "remote access off: invalid HABBLAUD_REMOTE_TOTP_SECRET; run npm run remote:totp",
   "Código do app autenticador": "Authenticator app code",
-  "Código do app autenticador incorreto ou vencido.": "Wrong or expired authenticator code.",
   "   Segundo fator: código de 6 dígitos do app autenticador (HABBLAUD_REMOTE_TOTP_SECRET).": "   Second factor: 6-digit authenticator app code (HABBLAUD_REMOTE_TOTP_SECRET).",
   "Segundo fator desligado. Rode npm run docker:up para valer.": "Second factor off. Run npm run docker:up to apply.",
   "O acesso remoto não está ligado (falta HABBLAUD_REMOTE_USER no .env): rode npm run remote:setup antes.": "Remote access is not on (HABBLAUD_REMOTE_USER missing in .env): run npm run remote:setup first.",
@@ -3494,4 +3493,5 @@ export const EN: Readonly<Record<string, string>> = {
   "(Para ver um QR em vez disso: brew install qrencode e rode de novo com --new.)": "(For a QR code instead: brew install qrencode and run again with --new.)",
   "Leia o QR acima com o app autenticador.": "Scan the QR code above with the authenticator app.",
   "Depois: npm run docker:up. Os logins abertos são encerrados; entre de novo com usuário, senha e o código.": "Then: npm run docker:up. Open logins are ended; sign in again with user, password and the code.",
+  "Usuário, senha ou código incorretos.": "Wrong user, password or code.",
 };

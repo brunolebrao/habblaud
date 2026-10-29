@@ -3484,7 +3484,6 @@ export const ES: Readonly<Record<string, string>> = {
   "falta a chave do 3D AI Studio: ponha HABBLAUD_3DAI_KEY no .env do Habblaud e reinicie o auxiliar": "falta la clave de 3D AI Studio: pon HABBLAUD_3DAI_KEY en el .env de Habblaud y reinicia el auxiliar",
   "acesso remoto desligado: HABBLAUD_REMOTE_TOTP_SECRET inválido; rode npm run remote:totp": "acceso remoto desactivado: HABBLAUD_REMOTE_TOTP_SECRET no válido; ejecuta npm run remote:totp",
   "Código do app autenticador": "Código de la app de autenticación",
-  "Código do app autenticador incorreto ou vencido.": "Código de autenticación incorrecto o vencido.",
   "   Segundo fator: código de 6 dígitos do app autenticador (HABBLAUD_REMOTE_TOTP_SECRET).": "   Segundo factor: código de 6 dígitos de la app de autenticación (HABBLAUD_REMOTE_TOTP_SECRET).",
   "Segundo fator desligado. Rode npm run docker:up para valer.": "Segundo factor desactivado. Ejecuta npm run docker:up para aplicarlo.",
   "O acesso remoto não está ligado (falta HABBLAUD_REMOTE_USER no .env): rode npm run remote:setup antes.": "El acceso remoto no está activado (falta HABBLAUD_REMOTE_USER en .env): ejecuta npm run remote:setup antes.",
@@ -3495,4 +3494,5 @@ export const ES: Readonly<Record<string, string>> = {
   "(Para ver um QR em vez disso: brew install qrencode e rode de novo com --new.)": "(Para ver un QR: brew install qrencode y vuelve a ejecutar con --new.)",
   "Leia o QR acima com o app autenticador.": "Escanea el QR de arriba con la app de autenticación.",
   "Depois: npm run docker:up. Os logins abertos são encerrados; entre de novo com usuário, senha e o código.": "Después: npm run docker:up. Los inicios de sesión abiertos se cierran; entra de nuevo con usuario, contraseña y el código.",
+  "Usuário, senha ou código incorretos.": "Usuario, contraseña o código incorrectos.",
 };

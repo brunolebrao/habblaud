@@ -88,16 +88,16 @@ describe('login remoto com código', () => {
     expect((await login(creds)).status).toBe(401);
     const wrong = await login({ ...creds, code: code === '000000' ? '111111' : '000000' });
     expect(wrong.status).toBe(401);
-    expect(((await wrong.json()) as { error: string }).error).toMatch(/Código/);
+    expect(((await wrong.json()) as { error: string }).error).toBe('Usuário, senha ou código incorretos.');
     const ok = await login({ ...creds, code });
     expect(ok.status).toBe(200);
     expect(ok.headers.get('set-cookie')).toMatch(/habblaud_remote=v1\./);
     expect((await login({ ...creds, code })).status).toBe(401);
-    // Senha errada com código certo: a mesma recusa de sempre (não diz que o código bateu).
+    // Senha errada com código certo: a mesma recusa (não revela qual dos três errou).
     now.t += 30_000;
     const next = totpCode(RFC_KEY, Math.floor(now.t / 30_000));
     const badPw = await login({ user: 'ana', password: 'errada', code: next });
-    expect(((await badPw.json()) as { error: string }).error).toMatch(/Usuário ou senha/);
+    expect(((await badPw.json()) as { error: string }).error).toBe('Usuário, senha ou código incorretos.');
   });
 
   it('tela de login pede o código só com o segundo fator ligado', () => {

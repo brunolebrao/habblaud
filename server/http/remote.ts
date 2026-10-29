@@ -480,12 +480,13 @@ export function createRemoteGate(deps: RemoteGateDeps): (req: IncomingMessage, r
           // O scrypt roda sempre (sem atalho que denuncie se foi o usuário ou a senha que errou).
           const okPassword = await verify(password, deps.config.passwordHash);
           const okUser = safeEqual(user.trim(), deps.config.user);
-          if (!(okUser && okPassword)) return sendJson(res, 401, { error: tr('Usuário ou senha incorretos.') });
-          if (deps.config.totp) {
-            const step = verifyTotp(deps.config.totp, typeof body.code === 'string' ? body.code : '', now());
-            if (step === undefined || step <= lastStep) return sendJson(res, 401, { error: tr('Código do app autenticador incorreto ou vencido.') });
-            lastStep = step;
+          // Com o segundo fator, o código é conferido sempre e a recusa é uma só: não revela se a senha estava certa.
+          const step = deps.config.totp ? verifyTotp(deps.config.totp, typeof body.code === 'string' ? body.code : '', now()) : undefined;
+          const okCode = !deps.config.totp || (step !== undefined && step > lastStep);
+          if (!(okUser && okPassword && okCode)) {
+            return sendJson(res, 401, { error: deps.config.totp ? tr('Usuário, senha ou código incorretos.') : tr('Usuário ou senha incorretos.') });
           }
+          if (step !== undefined) lastStep = step;
           ok = true;
           const { token, maxAgeS } = deps.sessions.issue();
           sendJson(res, 200, { ok: true }, { 'Set-Cookie': cookieHeader(token, maxAgeS, deps.secure) });
