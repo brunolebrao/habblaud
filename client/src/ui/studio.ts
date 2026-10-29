@@ -42,6 +42,8 @@ export interface StudioItemView {
   prompt?: string;
   model?: string;
   at: number;
+  /** Modelos 3D desta imagem (STL, GLB), para baixar. */
+  models?: string[];
 }
 
 export interface StudioProjectView {
@@ -65,6 +67,9 @@ export interface StudioState {
 }
 
 const FILE_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}$/;
+const MODEL_RE = /\.(?:stl|glb|3mf)$/i;
+/** Preço aproximado do modelo 3D no 3D AI Studio (server/studio/model3d.ts: MODEL3D_CREDITS). */
+const MODEL3D_CREDITS = 70;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const STATUSES = ['pending', 'queued', 'sent', 'done', 'failed'];
 
@@ -88,7 +93,7 @@ export function parseStudio(raw: unknown): StudioState {
     const x = rec(i);
     const f = file(x.file);
     if (!f) return [];
-    return [{ file: f, project: str(x.project) ?? f.split('/')[0]!, date: str(x.date) ?? f.split('/')[1]!, title: str(x.title), prompt: str(x.prompt), model: str(x.model), at: Number(x.at) || 0 }];
+    return [{ file: f, project: str(x.project) ?? f.split('/')[0]!, date: str(x.date) ?? f.split('/')[1]!, title: str(x.title), prompt: str(x.prompt), model: str(x.model), at: Number(x.at) || 0, models: list(x.models).map(file).filter((m): m is string => !!m && MODEL_RE.test(m)) }];
   });
   const projects = list(o.projects).flatMap((p): StudioProjectView[] => {
     const x = rec(p);
@@ -577,11 +582,29 @@ export class Studio implements UiComponent {
     const edit = iconButton(ICONS.pencil, tr('Editar: gerar uma versão a partir desta imagem'), () => this.editImage?.(i), 'ui-icon-btn--sm');
     edit.disabled = !this.state.available;
     setHidden(edit, this.readOnly);
+    // Modelo 3D: os arquivos prontos para baixar ou, sem eles, o botão (dois cliques: o segundo confirma o gasto).
+    const models = (i.models ?? []).map((m) =>
+      h('a', { class: 'ui-studio__model', text: m.split('.').pop()!.toUpperCase(), attrs: { href: fileUrl(m), download: m.split('/').pop()!, title: tr('Baixar o modelo 3D') } }),
+    );
+    const make3d = h('button', { class: 'ui-btn ui-btn--sm ui-studio__make3d', type: 'button', text: tr('Gerar 3D'), title: tr('Transformar esta imagem num modelo 3D para impressão (STL), pelo 3D AI Studio') });
+    let armed = false;
+    make3d.addEventListener('click', () => {
+      if (!armed) {
+        armed = true;
+        setText(make3d, tr('Confirmar (~{0} créditos)', [MODEL3D_CREDITS]));
+        return;
+      }
+      const title = `${label.slice(0, 70)} (3D)`;
+      void this.act(() => call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: i.project, kind: 'model3d', source: i.file, title }) }), tr('Gerando o modelo 3D: leva de 2 a 8 minutos.'));
+    });
+    make3d.disabled = !this.state.available;
+    setHidden(make3d, this.readOnly || models.length > 0);
     return h(
       'figure',
       { class: 'ui-studio__item' },
       link,
       h('figcaption', {}, h('span', { class: 'ui-studio__meta', text: label, attrs: { title: `${i.date}${i.model ? ` · ${i.model}` : ''}` } }), edit, copy),
+      h('div', { class: 'ui-studio__models' }, ...models, make3d),
     );
   }
 }

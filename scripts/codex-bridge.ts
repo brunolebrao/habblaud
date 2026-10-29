@@ -16,6 +16,7 @@
 // anexos) e transcreve o ditado com o Whisper local (whisper-cli + ffmpeg + modelo; ver server/dictation/whisper.ts).
 // Arquivos e ditado usam rodadas com espera: o Habblaud só responde quando chega trabalho (ou a cada 20 s).
 // Ctrl+C para parar.
+import { createModel3dGenerator, model3dKey } from '../server/studio/model3d';
 import { statSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -317,7 +318,8 @@ export async function studioRound(
     running.push(
       generate(req).then(
         async (out) => {
-          log(tr('✓ imagem do Estúdio gerada ({0}, {1} s)', [req.project, Math.round((Date.now() - started) / 1000)]));
+          const secs = Math.round((Date.now() - started) / 1000);
+          log(req.kind === 'model3d' ? tr('✓ modelo 3D do Estúdio pronto ({0}, {1} s)', [req.project, secs]) : tr('✓ imagem do Estúdio gerada ({0}, {1} s)', [req.project, secs]));
           await post('/api/host/studio/ack', { results: [{ id, ok: true, file: out.file }] });
         },
         async (err) => {
@@ -422,7 +424,17 @@ async function main(): Promise<void> {
     if (bin) {
       const mirror = studioMirror(process.env);
       if (mirror) log(tr('Estúdio: cada imagem também é copiada para {0}', [mirror]));
-      const generate = createCodexImageGenerator({ codexBin: bin, root: studioRoot(process.env), mirror });
+      const images = createCodexImageGenerator({ codexBin: bin, root: studioRoot(process.env), mirror });
+      // Modelo 3D (botão da galeria): pelo 3D AI Studio, com a chave do usuário (HABBLAUD_3DAI_KEY no .env).
+      const key = model3dKey(process.env);
+      const model3d = key ? createModel3dGenerator({ key, root: studioRoot(process.env), mirror }) : undefined;
+      log(model3d ? tr('Estúdio: modelos 3D pelo 3D AI Studio') : tr('Estúdio: sem HABBLAUD_3DAI_KEY no .env, o botão Gerar 3D não funciona'));
+      const generate: StudioGenerator = (req) =>
+        req.kind !== 'model3d'
+          ? images(req)
+          : model3d
+            ? model3d(req)
+            : Promise.reject(new Error(tr('falta a chave do 3D AI Studio: ponha HABBLAUD_3DAI_KEY no .env do Habblaud e reinicie o auxiliar')));
       void waitLoop(() => studioRound(waitPost, generate, log, { wait: true, guides: (projects) => writeProjectGuides(studioRoot(process.env), projects) }));
     }
   }

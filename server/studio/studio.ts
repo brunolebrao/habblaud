@@ -17,6 +17,8 @@ export const HOST_PRESENCE_MS = 10_000;
 const QUEUED_TIMEOUT_MS = 60_000;
 /** O Codex leva de 1 a 3 min; o prazo dele é de 10 (generate.ts). */
 const SENT_TIMEOUT_MS = 11 * 60_000;
+/** Modelo 3D: geração de até 5 min, conversão e downloads; o prazo do auxiliar é de 20 min por etapa (model3d.ts). */
+const MODEL3D_SENT_TIMEOUT_MS = 45 * 60_000;
 const KEEP_MS = 30 * 60_000;
 const MAX_OPEN = 3;
 const MAX_PENDING = 50;
@@ -28,7 +30,10 @@ const DESCRIPTION_MAX = 300;
 const STYLE_MAX = 1_000;
 const BY_MAX = 40;
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
+/** Modelos 3D ao lado da imagem (<nome>.stl, <nome>.glb; model3d.ts): só para baixar. */
+const MODEL_TYPES: Record<string, string> = { '.stl': 'model/stl', '.glb': 'model/gltf-binary', '.3mf': 'model/3mf' };
 const FILE_MAX_BYTES = 25 * 1024 * 1024;
+const MODEL_MAX_BYTES = 300 * 1024 * 1024;
 const REL_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const SESSION_RE = /^[\w-]{8,80}$/;
@@ -42,8 +47,10 @@ export interface StudioJob {
   title: string;
   /** O prompt como foi pedido (sem o guia de estilo do projeto). */
   prompt: string;
-  /** Edição: a imagem da galeria que serve de base. */
+  /** Edição: a imagem da galeria que serve de base (no modelo 3D, a imagem que vira modelo). */
   source?: string;
+  /** "model3d": o modelo 3D (STL e GLB) da imagem `source`; só pelo painel. Ausente = imagem. */
+  kind?: 'model3d';
   status: StudioJobStatus;
   at: number;
   /** Quem pediu (o agente diz o próprio nome; só para mostrar). Ausente = o painel. */
@@ -84,6 +91,8 @@ export interface StudioItem {
   model?: string;
   createdAt?: string;
   at: number;
+  /** Modelos 3D desta imagem ("<projeto>/<data>/<nome>.stl" etc.), para baixar. */
+  models?: string[];
 }
 
 export interface StudioServiceOptions {
@@ -157,8 +166,10 @@ export function listGallery(root: string, only?: string): StudioItem[] {
         } catch {
           continue;
         }
-        const meta = readMeta(join(dir, `${name.slice(0, -ext.length)}.json`));
-        out.push({ file: `${project}/${date}/${name}`, project, date, title: str(meta.title, 120), prompt: str(meta.prompt), model: str(meta.model, 60), createdAt: str(meta.createdAt, 40), at });
+        const stem = name.slice(0, -ext.length);
+        const meta = readMeta(join(dir, `${stem}.json`));
+        const models = names.filter((n) => n.startsWith(`${stem}.`) && MODEL_TYPES[extname(n).toLowerCase()] && n.slice(stem.length + 1).indexOf('.') < 0).sort().map((n) => `${project}/${date}/${n}`);
+        out.push({ file: `${project}/${date}/${name}`, project, date, title: str(meta.title, 120), prompt: str(meta.prompt), model: str(meta.model, 60), createdAt: str(meta.createdAt, 40), at, ...(models.length ? { models } : {}) });
       }
     }
   }
@@ -167,14 +178,16 @@ export function listGallery(root: string, only?: string): StudioItem[] {
 
 /** Lê uma imagem da galeria; só "<projeto>/<data>/<nome>.<png|jpg|webp>" dentro da raiz (links resolvidos). */
 export function readGalleryFile(root: string, rel: string): { data: Buffer; type: string; name: string } | { status: number; error: string } {
-  const type = IMAGE_TYPES[extname(rel).toLowerCase()];
+  const ext = extname(rel).toLowerCase();
+  const type = IMAGE_TYPES[ext] ?? MODEL_TYPES[ext];
   if (!REL_RE.test(rel) || rel.includes('..') || !type) return { status: 400, error: tr('arquivo inválido') };
+  const max = MODEL_TYPES[ext] ? MODEL_MAX_BYTES : FILE_MAX_BYTES;
   try {
     const realRoot = realpathSync(root);
     const real = realpathSync(join(root, rel));
     if (!real.startsWith(realRoot + sep)) return { status: 403, error: tr('fora do Estúdio') };
     const st = statSync(real);
-    if (!st.isFile() || st.size > FILE_MAX_BYTES) return { status: 404, error: tr('arquivo não encontrado') };
+    if (!st.isFile() || st.size > max) return { status: 404, error: tr('arquivo não encontrado') };
     return { data: readFileSync(real), type, name: rel.split('/').pop()! };
   } catch {
     return { status: 404, error: tr('arquivo não encontrado') };
@@ -262,6 +275,8 @@ export class StudioService {
     const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
     const requestedBy = opts.direct ? undefined : (str(r.requestedBy, BY_MAX) ?? tr('um agente'));
     const session = !opts.direct && typeof r.session === 'string' && SESSION_RE.test(r.session) ? r.session : undefined;
+    // O modelo 3D gasta créditos do 3D AI Studio: só você, pelo painel.
+    if (req.kind && !opts.direct) return { error: 'invalid', reason: tr('o modelo 3D só sai pelo painel do Estúdio') };
     if (opts.direct) {
       const busy = this.busy();
       if (busy) return busy;
@@ -273,7 +288,7 @@ export class StudioService {
       if (this.projectsBySlug.size >= MAX_PROJECTS) return { error: 'too-many', reason: tr('projetos demais') };
       this.projectsBySlug.set(req.project, { slug: req.project, name: req.project, updatedAt: this.now() });
     }
-    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, ...(req.source ? { source: req.source } : {}), status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
+    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, ...(req.source ? { source: req.source } : {}), ...(req.kind ? { kind: req.kind } : {}), status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
     const entry: Entry = { job, touched: this.now() };
     this.entries.set(job.id, entry);
     if (opts.direct) this.start(entry);
@@ -287,7 +302,7 @@ export class StudioService {
     const e = this.entries.get(id);
     if (!e || e.job.status !== 'pending') return { error: 'unknown', reason: tr('pedido desconhecido (já aprovado ou descartado?)') };
     const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt, source: e.job.source });
+    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt, source: e.job.source, kind: e.job.kind });
     if ('error' in req) return { error: 'invalid', reason: req.error };
     const busy = this.busy();
     if (busy) return busy;
@@ -387,6 +402,7 @@ export class StudioService {
   }
 
   private request(job: StudioJob): StudioRequest {
+    if (job.kind === 'model3d') return { project: job.project, title: job.title, prompt: '', source: job.source, kind: 'model3d' };
     return { project: job.project, title: job.title, prompt: composePrompt(job.prompt, this.projectsBySlug.get(job.project)?.style), ...(job.source ? { source: job.source } : {}) };
   }
 
@@ -427,7 +443,7 @@ export class StudioService {
     for (const [id, e] of this.entries) {
       const age = now - e.touched;
       if (e.job.status === 'queued' && age > QUEUED_TIMEOUT_MS) this.fail(e, tr('o auxiliar do computador não buscou o pedido'));
-      else if (e.job.status === 'sent' && age > SENT_TIMEOUT_MS) this.fail(e, tr('a geração demorou demais'));
+      else if (e.job.status === 'sent' && age > (e.job.kind === 'model3d' ? MODEL3D_SENT_TIMEOUT_MS : SENT_TIMEOUT_MS)) this.fail(e, tr('a geração demorou demais'));
       else if ((e.job.status === 'done' || e.job.status === 'failed') && age > KEEP_MS) this.entries.delete(id);
     }
   }

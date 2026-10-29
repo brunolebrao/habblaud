@@ -31,6 +31,8 @@ export interface StudioRequest {
   source?: string;
   /** Trabalho do Higgsfield que gerou a imagem base (serve de referência sem reenviar o arquivo). */
   sourceJob?: string;
+  /** "model3d": em vez de imagem, o modelo 3D (STL e GLB) da imagem `source`, pelo 3D AI Studio (model3d.ts). */
+  kind?: 'model3d';
 }
 
 /** Imagem da galeria: "<projeto>/<data>/<nome>.<png|jpg|webp>". */
@@ -61,12 +63,13 @@ export function parseStudioRequest(raw: unknown, maxPrompt = PROMPT_MAX): Studio
   const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const project = typeof r.project === 'string' ? projectSlug(r.project) : '';
   if (!PROJECT_RE.test(project)) return { error: tr('projeto inválido (letras, números e hífens)') };
+  const kind = r.kind === 'model3d' ? 'model3d' : undefined;
   const prompt = typeof r.prompt === 'string' ? r.prompt.trim() : '';
-  if (!prompt) return { error: tr('escreva o prompt da imagem') };
+  if (!prompt && !kind) return { error: tr('escreva o prompt da imagem') };
   if (prompt.length > maxPrompt) return { error: tr('prompt longo demais (até {0} caracteres)', [maxPrompt]) };
   const rawTitle = typeof r.title === 'string' ? r.title.replace(/\s+/g, ' ').trim() : '';
   if (rawTitle.length > TITLE_MAX) return { error: tr('título longo demais (até {0} caracteres)', [TITLE_MAX]) };
-  const title = rawTitle || prompt.replace(/\s+/g, ' ').slice(0, 60).trim();
+  const title = rawTitle || prompt.replace(/\s+/g, ' ').slice(0, 60).trim() || tr('Modelo 3D');
   let source: string | undefined;
   if (r.source !== undefined && r.source !== null && r.source !== '') {
     if (typeof r.source !== 'string' || !SOURCE_RE.test(r.source) || r.source.includes('..') || !r.source.startsWith(`${project}/`)) {
@@ -74,8 +77,9 @@ export function parseStudioRequest(raw: unknown, maxPrompt = PROMPT_MAX): Studio
     }
     source = r.source;
   }
+  if (kind && !source) return { error: tr('escolha a imagem da galeria') };
   const sourceJob = source && typeof r.sourceJob === 'string' && JOB_RE.test(r.sourceJob) ? r.sourceJob : undefined;
-  return { project, title, prompt, ...(source ? { source } : {}), ...(sourceJob ? { sourceJob } : {}) };
+  return { project, title, prompt, ...(source ? { source } : {}), ...(sourceJob ? { sourceJob } : {}), ...(kind ? { kind } : {}) };
 }
 
 export function studioRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -266,17 +270,24 @@ export function studioMirror(env: NodeJS.ProcessEnv = process.env): string | und
   return raw.startsWith('~/') ? join(env.HOME || homedir(), raw.slice(2)) : raw;
 }
 
-/** Copia a imagem e os seus .md/.json para o espelho. Nunca lança: devolve o erro, se houver. */
-export function mirrorImage(root: string, mirror: string, rel: string): string | undefined {
+/** Copia arquivos da raiz (relativos) para o espelho, na mesma estrutura. Nunca lança: devolve o erro, se houver. */
+export function mirrorFiles(root: string, mirror: string, rels: readonly string[]): string | undefined {
   try {
-    const dir = dirname(rel);
-    const stem = rel.replace(/\.[a-z]+$/i, '');
-    mkdirSync(join(mirror, dir), { recursive: true });
-    for (const f of [rel, `${stem}.md`, `${stem}.json`]) if (existsSync(join(root, f))) copyFileSync(join(root, f), join(mirror, f));
+    for (const f of rels) {
+      if (!existsSync(join(root, f))) continue;
+      mkdirSync(join(mirror, dirname(f)), { recursive: true });
+      copyFileSync(join(root, f), join(mirror, f));
+    }
     return undefined;
   } catch (err) {
     return (err as Error).message;
   }
+}
+
+/** Copia a imagem e os seus .md/.json para o espelho. Nunca lança: devolve o erro, se houver. */
+export function mirrorImage(root: string, mirror: string, rel: string): string | undefined {
+  const stem = rel.replace(/\.[a-z]+$/i, '');
+  return mirrorFiles(root, mirror, [rel, `${stem}.md`, `${stem}.json`]);
 }
 
 export type CodexRun = ({ ok: true } | { ok: false; error: string }) & { output: string };
