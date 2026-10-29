@@ -9,7 +9,8 @@
 //   HABBLAUD_REMOTE_USER + HABBLAUD_REMOTE_PASSWORD_HASH  ligam a porta (o hash é scrypt, ver remote/password.ts;
 //                                                         senha em texto puro não é aceita)
 //   HABBLAUD_REMOTE_ALLOW   o que a sessão remota pode fazer além de ver: permissions, messages, terminal, spawn,
-//                           studio (gerar e aprovar no Estúdio; sem ele, a galeria só para ver) ("none" = só ver).
+//                           studio (gerar e aprovar no Estúdio; sem ele, a galeria só para ver), rooms (renomear
+//                           salas) ("none" = só ver).
 //                           Padrão: permissions.
 //   HABBLAUD_REMOTE_TLS_DIR pasta com server.key, server.crt (e ca.crt, servido em /remote/ca.crt). Padrão:
 //                           /remote-tls no Docker, ~/.habblaud/remote-tls/server no Node. Sem certificado a porta não
@@ -30,9 +31,9 @@ import { parsePasswordHash, verifyPassword, type PasswordHash } from '../remote/
 import { hostAllowed } from './guard';
 import { getLocale, tr } from '../../shared/i18n';
 
-export type RemoteFeature = 'permissions' | 'messages' | 'terminal' | 'spawn' | 'studio';
+export type RemoteFeature = 'permissions' | 'messages' | 'terminal' | 'spawn' | 'studio' | 'rooms';
 
-const FEATURES: readonly RemoteFeature[] = ['permissions', 'messages', 'terminal', 'spawn', 'studio'];
+const FEATURES: readonly RemoteFeature[] = ['permissions', 'messages', 'terminal', 'spawn', 'studio', 'rooms'];
 
 export interface RemoteTls {
   dir: string;

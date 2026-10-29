@@ -765,10 +765,10 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       return true;
     }
     if (path === '/api/rooms/rename') {
-      // Como o personagem: a mesma trava do terminal (bind local + Host local).
+      // Como o personagem: a mesma trava do terminal (bind local + Host local); pela porta remota, com `rooms`.
       if (method !== 'POST') methodNotAllowed(res, 'POST');
       else if (!deps.terminal) sendJson(res, 403, { error: tr('renomear salas desligado: só funciona com o Habblaud acessível apenas pelo próprio computador') });
-      else if (!trusted(req)) sendJson(res, 403, { error: denied(req, tr('renomear salas só pelo próprio computador (http://localhost)')) });
+      else if (!trusted(req, 'rooms')) sendJson(res, 403, { error: denied(req, tr('renomear salas só pelo próprio computador (http://localhost)')) });
       else
         readJson(req)
           .then((body) => {

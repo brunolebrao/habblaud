@@ -682,4 +682,14 @@ describe('Estúdio pela porta remota', () => {
     expect(JSON.parse((await request(s.remoteBase, '/api/studio', { headers })).body).readOnly).toBeUndefined();
     root.cleanup();
   });
+
+  it('renomear sala pela porta remota só com rooms em HABBLAUD_REMOTE_ALLOW', async () => {
+    for (const [allow, ok] of [[['permissions'], false], [['permissions', 'rooms'], true]] as const) {
+      const s = await start([...allow]);
+      const cookie = await login(s.remoteBase);
+      const headers = { Cookie: cookie, Origin: s.remoteBase };
+      const r = await request(s.remoteBase, '/api/rooms/rename', { method: 'POST', headers, body: { id: 'x', name: 'KMV' } });
+      expect(r.status === 403, allow.join()).toBe(!ok);
+    }
+  });
 });
