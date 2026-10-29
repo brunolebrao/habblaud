@@ -21,7 +21,7 @@ export function canRenameRoom(ctx: UiContext, roomId: string): boolean {
     !ctx.store.mock &&
     !ctx.store.replaying &&
     !!ctx.store.snapshot?.meta.terminal &&
-    access().local
+    (access().rooms ?? access().local)
   );
 }
 

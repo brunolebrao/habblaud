@@ -11,7 +11,7 @@ export interface EditGate {
   live: boolean;
   /** meta.terminal: o Habblaud só é acessível pelo próprio computador (bind local). */
   terminal: boolean;
-  /** A página foi aberta por localhost/127.x (o servidor recusa o resto). */
+  /** A página pode editar o escritório (AccessInfo.rooms; servidor antigo: aberta por localhost/127.x). */
   local: boolean;
   replaying: boolean;
   mock: boolean;

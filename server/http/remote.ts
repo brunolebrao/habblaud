@@ -10,7 +10,7 @@
 //                                                         senha em texto puro não é aceita)
 //   HABBLAUD_REMOTE_ALLOW   o que a sessão remota pode fazer além de ver: permissions, messages, terminal, spawn,
 //                           studio (gerar e aprovar no Estúdio; sem ele, a galeria só para ver), rooms (renomear
-//                           salas) ("none" = só ver).
+//                           salas e editar personagens) ("none" = só ver).
 //                           Padrão: permissions.
 //   HABBLAUD_REMOTE_TLS_DIR pasta com server.key, server.crt (e ca.crt, servido em /remote/ca.crt). Padrão:
 //                           /remote-tls no Docker, ~/.habblaud/remote-tls/server no Node. Sem certificado a porta não

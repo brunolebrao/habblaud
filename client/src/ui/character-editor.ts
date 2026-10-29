@@ -76,7 +76,7 @@ export class CharacterEditor {
     const allowed = canEditCharacter(a, {
       live,
       terminal: !!store.snapshot?.meta.terminal,
-      local: access().local,
+      local: access().rooms ?? access().local,
       replaying: store.replaying,
       mock: store.mock,
     });

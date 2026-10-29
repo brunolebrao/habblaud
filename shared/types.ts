@@ -424,8 +424,7 @@ export interface BrandInfo {
 
 /**
  * O que ESTA página pode fazer (GET /api/access): a porta local libera tudo pelo Host local; a porta remota com login
- * (server/http/remote.ts) só o que HABBLAUD_REMOTE_ALLOW liberar. `local` = aberta pelo próprio computador (editar
- * personagem e renomear salas, que nunca valem pela porta remota).
+ * (server/http/remote.ts) só o que HABBLAUD_REMOTE_ALLOW liberar. `local` = aberta pelo próprio computador.
  */
 export interface AccessInfo {
   remote: boolean;
@@ -439,6 +438,11 @@ export interface AccessInfo {
   studio?: boolean;
   /** Pode VER a galeria do Estúdio (projetos, imagens e prompts): o próprio computador e o acesso remoto com login. */
   studioView?: boolean;
+  /**
+   * Pode editar o escritório (renomear salas e editar personagens): o próprio computador e, pela porta remota, `rooms` em
+   * HABBLAUD_REMOTE_ALLOW. Ausente em servidores antigos (vale `local`).
+   */
+  rooms?: boolean;
   /**
    * Pode usar a conta do Habblaud World (/api/world/*): recurso ligado (HABBLAUD_WORLD), trava do terminal e porta local
    * com Host local. Ausente em servidores antigos.
