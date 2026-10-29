@@ -209,6 +209,11 @@ export class Studio implements UiComponent {
     else this.hide();
   }
 
+  /** Abre o painel (link ?studio=1, toque num aviso do Estúdio no celular). */
+  show(): void {
+    if (this.enabled && !this.open) this.toggle();
+  }
+
   private toggle(): void {
     if (this.open) return this.hide();
     const r = this.button.getBoundingClientRect();

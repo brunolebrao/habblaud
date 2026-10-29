@@ -1,6 +1,7 @@
 // Configurações (popover): opções do escritório, avisos, modo demonstração e Sobre (versão). O Habblaud World tem a
 // janela própria (ui/world/world-dialog.ts); daqui só sai a dica do tema em Aparência, que também vai para o prédio.
 import { access, remoteLogout } from '../net/access';
+import { disablePush, enablePush, pushState, type PushState } from '../net/push';
 import type { UiComponent, UiContext } from './context';
 import { h, iconButton, setAttr, setHidden, setText } from './dom';
 import { ICONS } from './icons';
@@ -98,6 +99,9 @@ export class SettingsPopover implements UiComponent {
   private logoutBtn: HTMLButtonElement;
   private about: AboutGroup;
   private demoBusy = false;
+  /** Avisos no celular deste aparelho (o estado vem do service worker, lido ao abrir as configurações). */
+  private push = switchRow(tr('Avisos no celular'), '', () => void this.togglePush());
+  private pushState: PushState | 'busy' = 'off';
   private anchor: HTMLElement | null = null;
 
   constructor(
@@ -212,6 +216,7 @@ export class SettingsPopover implements UiComponent {
         { class: 'ui-set-group' },
         h('h3', { text: tr('Avisos') }),
         sw('browserNotifications', tr('Notificações do navegador'), tr('Avisa quando alguém precisa de você e a aba está em segundo plano.'), () => void this.toggleNotifications()),
+        this.push.row,
         ...(VoiceReader.supported ? [sw('readAloud', tr('Ler em voz alta'), tr('Quando um agente termina, lê o começo da resposta; quando ele precisa de você, lê a pergunta. Usa a voz do sistema.'), flip('readAloud'))] : []),
       ),
       this.soundGroup.el,
@@ -223,7 +228,10 @@ export class SettingsPopover implements UiComponent {
     this.el.addEventListener('toggle', () => {
       this.anchor?.setAttribute('aria-expanded', String(this.isOpen));
       this.syncRootClass();
-      if (this.isOpen) this.render();
+      if (this.isOpen) {
+        this.render();
+        void this.refreshPush();
+      }
     });
   }
 
@@ -303,6 +311,43 @@ export class SettingsPopover implements UiComponent {
           : tr('Avisa quando alguém precisa de você e a aba está em segundo plano.');
     setText(notif.hint, hint);
     notif.btn.disabled = state === 'unsupported';
+
+    const ps = this.pushState;
+    setHidden(this.push.row, !access().push);
+    setAttr(this.push.btn, 'aria-checked', String(ps === 'on'));
+    this.push.btn.disabled = ps === 'busy' || ps === 'unsupported' || ps === 'ios-home' || ps === 'denied';
+    setText(
+      this.push.hint,
+      ps === 'ios-home'
+        ? tr('No iPhone: adicione o escritório à Tela de Início (Compartilhar › Adicionar à Tela de Início) e abra por lá.')
+        : ps === 'unsupported'
+          ? tr('Este navegador não oferece avisos no celular.')
+          : ps === 'denied'
+            ? tr('Bloqueadas pelo navegador: libere nas permissões do site.')
+            : tr('Chegam neste aparelho mesmo com o escritório fechado: quando um agente precisa de você e quando uma imagem do Estúdio fica pronta ou falha.'),
+    );
+  }
+
+  private async refreshPush(): Promise<void> {
+    if (!access().push || this.pushState === 'busy') return;
+    this.pushState = await pushState();
+    this.render();
+  }
+
+  private async togglePush(): Promise<void> {
+    if (this.pushState === 'busy') return;
+    const turnOn = this.pushState !== 'on';
+    this.pushState = 'busy';
+    this.render();
+    try {
+      if (turnOn) await enablePush();
+      else await disablePush();
+      this.ctx.announce(turnOn ? tr('Avisos no celular ligados: um aviso de teste foi enviado.') : tr('Avisos no celular desligados neste aparelho.'));
+    } catch (err) {
+      this.ctx.announce(tr('Não deu para mudar os avisos no celular: {0}', [(err as Error).message]));
+    }
+    this.pushState = 'off';
+    await this.refreshPush();
   }
 
   private async toggleNotifications(): Promise<void> {

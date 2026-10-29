@@ -109,6 +109,8 @@ export interface StudioServiceOptions {
   notify?: (session: string, text: string, attachments?: string[]) => { ok: true } | { error: string };
   /** Nome, no escritório, do agente desta sessão (para o painel mostrar a quem o ajuste vai). */
   agentName?: (session: string) => string | undefined;
+  /** Uma geração terminou (pronta ou falhou): para os avisos no celular. */
+  onResult?: (job: StudioJob) => void;
 }
 
 export type StudioSubmit = { job: StudioJob } | { error: 'invalid' | 'unavailable' | 'too-many' | 'unknown'; reason: string };
@@ -430,12 +432,14 @@ export class StudioService {
     e.job.status = 'done';
     e.job.file = file;
     e.touched = this.now();
+    this.opts.onResult?.(e.job);
   }
 
   private fail(e: Entry, error: string): void {
     e.job.status = 'failed';
     e.job.error = error.slice(0, ERROR_MAX);
     e.touched = this.now();
+    this.opts.onResult?.(e.job);
   }
 
   private prune(): void {

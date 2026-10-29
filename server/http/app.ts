@@ -20,6 +20,7 @@ import { ATTACHMENT_BODY_MAX, parseAttachment, type AttachmentStore } from '../s
 import type { SpawnFolder } from '../spawn/folders';
 import { AUDIO_BODY_MAX, type DictationService } from '../dictation/dictation';
 import type { StudioService, StudioSubmit } from '../studio/studio';
+import type { PushService } from '../push/service';
 import type { DeliveryIndex } from '../deliveries/deliveries';
 import type { FileFetcher } from '../deliveries/fetcher';
 import { HOST_WAIT_MS } from '../host-wait';
@@ -79,6 +80,8 @@ export interface ApiDeps {
   deliveries?: DeliveryIndex;
   /** Quem lê os arquivos das entregas (e, para o auxiliar do host, /api/host/files/*; deliveries/fetcher.ts). */
   files?: FileFetcher;
+  /** Avisos no celular (Web Push: /api/push/*; push/service.ts). */
+  push?: PushService;
   /** Renomeia a sala (POST /api/rooms/rename {id, name}; vazio volta ao padrão). Devolve o nome em uso, ou undefined se a sala não existe. */
   renameRoom?: (id: string, name: string) => string | undefined;
   /** Estatísticas do "Meu dia" (GET /api/stats, http/stats.ts). */
@@ -413,6 +416,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
           spawn: !!deps.spawn && trusted(req, 'spawn'),
           ...(deps.studio ? { studio: trusted(req, 'studio'), studioView: trusted(req, 'studio') || remote } : {}),
           rooms: !!deps.terminal && trusted(req, 'rooms'),
+          push: !!deps.push && (remote || trusted(req)),
           world: !!deps.world && !!deps.terminal && !remote && isLoopbackHost(req.headers.host),
         };
         sendJson(res, 200, access);
@@ -764,6 +768,36 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       const detail = office.detail(id);
       if (detail) sendJson(res, 200, detail);
       else sendJson(res, 404, { error: tr('agente não encontrado') });
+      return true;
+    }
+    if (path === '/api/push' || path.startsWith('/api/push/')) {
+      // Avisos no celular: qualquer página que já vê o escritório (porta local pelo Host local, ou remota com login)
+      // pode cadastrar o próprio aparelho; o aviso só leva o que o escritório já mostra.
+      const push = deps.push;
+      if (!push) sendJson(res, 403, { error: tr('avisos no celular desligados') });
+      else if (!isRemote(req) && !trusted(req)) sendJson(res, 403, { error: denied(req, tr('avisos no celular só pelo próprio computador ou pelo acesso remoto com login')) });
+      else if (path === '/api/push') {
+        if (!isRead) methodNotAllowed(res, 'GET');
+        else sendJson(res, 200, { key: push.publicKey(), devices: push.count() });
+      } else if (method !== 'POST') methodNotAllowed(res, 'POST');
+      else
+        readJson(req, 8 * 1024)
+          .then(async (body) => {
+            const b = (body ?? {}) as { subscription?: unknown; endpoint?: unknown };
+            if (path === '/api/push/subscribe') {
+              if (!push.subscribe(b.subscription)) throw new HttpError(400, tr('assinatura de push inválida'));
+              sendJson(res, 200, { ok: true, devices: push.count() });
+            } else if (path === '/api/push/unsubscribe') {
+              push.unsubscribe(b.endpoint);
+              sendJson(res, 200, { ok: true, devices: push.count() });
+            } else if (path === '/api/push/test') {
+              if (typeof b.endpoint !== 'string' || !push.has(b.endpoint)) throw new HttpError(404, tr('este aparelho não está cadastrado'));
+              const sent = await push.send({ title: tr('Avisos ligados'), body: tr('É assim que os avisos do escritório chegam neste aparelho.'), tag: 'test' }, b.endpoint);
+              if (!sent) throw new HttpError(502, tr('o serviço de push do navegador recusou o aviso'));
+              sendJson(res, 200, { ok: true });
+            } else throw new HttpError(404, tr('rota desconhecida'));
+          })
+          .catch((err) => fail(res, err));
       return true;
     }
     if (path === '/api/rooms/rename') {

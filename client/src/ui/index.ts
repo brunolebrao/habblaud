@@ -220,13 +220,15 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   topbar.panelGroup.prepend(deliveries.button);
   const studio = new Studio(ctx);
   topbar.panelGroup.prepend(studio.button);
-  // Links com ?agent= / ?delivery= (abrem o agente ou a entrega ao carregar).
+  // Links com ?agent= / ?delivery= / ?studio=1 (abrem o agente, a entrega ou o Estúdio ao carregar).
   const openLink = (url: URL) => {
     const agent = url.searchParams.get('agent');
     const delivery = url.searchParams.get('delivery');
-    if (!agent && !delivery) return;
+    const studioLink = url.searchParams.get('studio') === '1';
+    if (!agent && !delivery && !studioLink) return;
     const go = () => {
-      if (delivery) void deliveries.openById(delivery);
+      if (studioLink) studio.show();
+      else if (delivery) void deliveries.openById(delivery);
       else if (agent && ctx.agent(agent)) ctx.select({ type: 'agent', id: agent }, { focus: true });
     };
     if (store.snapshot) go();
@@ -239,6 +241,13 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
     if (url.search && location.search === url.search) window.history.replaceState(null, '', location.pathname);
   };
   if (typeof location !== 'undefined') openLink(new URL(location.href));
+  // Toque num aviso do celular com o escritório já aberto: o service worker manda o link para esta página.
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e: MessageEvent) => {
+      const data = e.data as { type?: unknown; url?: unknown } | null;
+      if (data?.type === 'habblaud-open' && typeof data.url === 'string') openLink(new URL(data.url, location.href));
+    });
+  }
   drawer = new Drawer(ctx, terminal, pty);
   const feed = new FeedPanel(ctx);
   const toasts = new Toasts(ctx);

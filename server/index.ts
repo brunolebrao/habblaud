@@ -65,6 +65,7 @@ import { OwnerSocial } from './world/social';
 import { BuildingTokens } from './world/tokens';
 import { BuildingUplink } from './world/uplink';
 import { WorldViewer } from './world/viewer';
+import { PushService } from './push/service';
 
 const config = loadConfig();
 // Marca própria (brand.json): lida uma vez ao iniciar; mudou, reinicie.
@@ -165,6 +166,22 @@ const hub = new Hub(office, {
   peers,
   canAnswer: (req) => (isRemoteRequest(req) ? !!config.remote?.allow.has('permissions') : isLoopbackHost(req.headers.host)),
 });
+// Avisos no celular (Web Push): ligados por padrão; só mandam algo depois que um aparelho se cadastra. HABBLAUD_PUSH=0 desliga.
+const pushFlag = process.env.HABBLAUD_PUSH?.trim();
+const push = pushFlag && !isTruthy(pushFlag)
+  ? undefined
+  : new PushService({
+      file: join(config.dataDir, 'push.json'),
+      keysFile: join(config.dataDir, 'push-vapid.json'),
+      subject: process.env.HABBLAUD_PUSH_CONTACT?.trim() || undefined,
+      warn: (text) => log.warn(text),
+    });
+if (push) {
+  hub.onNotice((n) => {
+    if (n.level !== 'alert' || !push.count()) return;
+    void push.send({ title: tr('Habblaud — precisa de você').replace('Habblaud', brandLoad.brand?.name ?? 'Habblaud'), body: n.text, tag: n.agentId ?? n.id, ...(n.agentId ? { agentId: n.agentId } : {}) });
+  });
+}
 // "Meu dia": amostra o escritório a cada segundo e persiste em <dataDir>/stats/ (ver history/daystats.ts).
 const stats = new DayStatsService({ dir: join(config.dataDir, 'stats'), snapshot: () => hub.current() });
 stats.load();
@@ -301,6 +318,20 @@ const studio = config.studio
       stateFile: join(config.dataDir, 'studio.json'),
       generator: studioCodex ? createCodexImageGenerator({ codexBin: studioCodex, root: config.studioDir, mirror: studioMirror(process.env) }) : undefined,
       agentName: (session) => office.list().find((a) => a.sessionId === session && !a.id.startsWith(`${session}:`))?.name,
+      onResult: (job) => {
+        if (!push?.count()) return;
+        const model = job.kind === 'model3d';
+        const title =
+          job.status === 'done'
+            ? model
+              ? tr('🧊 Modelo 3D pronto')
+              : tr('🖼️ Imagem pronta')
+            : model
+              ? tr('⚠️ O modelo 3D falhou')
+              : tr('⚠️ A geração da imagem falhou');
+        const body = job.status === 'done' ? `${job.title} · ${job.project}` : `${job.title}: ${job.error ?? ''}`;
+        void push.send({ title, body, tag: `studio:${job.id}`, studio: true });
+      },
       // "Pedir ajuste": o comentário vai à sessão que escreveu o pedido, pelas mensagens do escritório.
       notify: (session, text, ids) => {
         if (!messages) return { error: tr('mensagens pelo escritório desligadas: peça o ajuste direto ao agente') };
@@ -430,6 +461,7 @@ const api = createApiHandler({
   attachments,
   dictation,
   studio,
+  push,
   deliveries,
   files: deliveryFiles,
   spawnFolders: async () => {

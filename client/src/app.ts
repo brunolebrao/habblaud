@@ -1,5 +1,6 @@
 // O app do cliente: store (dados) -> mundo (canvas) -> UI (painéis). Carregado por main.ts depois do dicionário do
 // idioma ativo, porque vários módulos chamam tr() ao carregar.
+import { registerPushWorker } from './net/push';
 import { loadAccess } from './net/access';
 import { OfficeStore } from './net/store';
 import { createWorld, type WorldApi } from './world';
@@ -31,7 +32,9 @@ export function start(): void {
   // poucos segundos e fica a regra de antes).
   if (store.mock) store.connect();
   else {
-    void loadAccess().finally(() => store.connect());
+    void loadAccess()
+      .then((a) => a.push && registerPushWorker())
+      .finally(() => store.connect());
     // Reconexão (servidor reiniciado, celular de volta do bloqueio): o acesso pode ter mudado, e o login pode ter
     // vencido (loadAccess leva à tela de entrada).
     let opened = false;

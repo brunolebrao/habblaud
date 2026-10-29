@@ -27,6 +27,7 @@ export class Hub {
   private lastFlush = 0;
   private unsubscribe: (() => void) | null = null;
   private snapshotCbs = new Set<(snap: OfficeSnapshot) => void>();
+  private noticeCbs = new Set<(n: Notice) => void>();
   private readonly throttleMs: number;
   private readonly pingMs: number;
   /** Quem pode responder pelo escritório; padrão: Host local. A porta remota (http/remote.ts) troca a regra. */
@@ -80,6 +81,12 @@ export class Hub {
   }
 
   /** Avisado a cada snapshot novo transmitido (ex.: o gravador da linha do tempo). */
+  /** Avisos do escritório (os mesmos que vão às páginas): para os avisos no celular (server/push). */
+  onNotice(cb: (n: Notice) => void): () => void {
+    this.noticeCbs.add(cb);
+    return () => void this.noticeCbs.delete(cb);
+  }
+
   onSnapshot(cb: (snap: OfficeSnapshot) => void): () => void {
     this.snapshotCbs.add(cb);
     return () => void this.snapshotCbs.delete(cb);
@@ -134,7 +141,16 @@ export class Hub {
       }
     }
     if (r.feed.length) this.writeAll(frame('feed', r.feed));
-    for (const n of r.notices) this.writeAll(frame('notice', n));
+    for (const n of r.notices) {
+      this.writeAll(frame('notice', n));
+      for (const cb of this.noticeCbs) {
+        try {
+          cb(n);
+        } catch {
+          // quem escuta não atrapalha a transmissão
+        }
+      }
+    }
     return r.snapshot;
   }
 

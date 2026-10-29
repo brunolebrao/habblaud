@@ -443,6 +443,8 @@ export interface AccessInfo {
    * HABBLAUD_REMOTE_ALLOW. Ausente em servidores antigos (vale `local`).
    */
   rooms?: boolean;
+  /** Pode cadastrar este aparelho para os avisos no celular (/api/push/*). Ausente = desligado ou servidor antigo. */
+  push?: boolean;
   /**
    * Pode usar a conta do Habblaud World (/api/world/*): recurso ligado (HABBLAUD_WORLD), trava do terminal e porta local
    * com Host local. Ausente em servidores antigos.

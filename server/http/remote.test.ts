@@ -27,6 +27,7 @@ import {
 import { Hub } from './sse';
 import { hashPassword, parsePasswordHash } from '../remote/password';
 import { SpawnService } from '../spawn/spawn';
+import { PushService } from '../push/service';
 
 setQuiet(true);
 
@@ -225,6 +226,7 @@ async function start(allow: RemoteFeature[] = ['permissions'], extra: { studio?:
       sendJson(res, 200, { ok: true });
     },
     renameRoom: () => 'sala',
+    push: new PushService({ file: join(tmp.dir, 'push.json'), keysFile: join(tmp.dir, 'push-vapid.json') }),
     studio: extra.studio,
     remote: { is: isRemoteRequest, allows: (f) => allowSet.has(f) },
     world: (req, res, url) => {
@@ -600,9 +602,10 @@ describe('GET /api/access (o que a página pode fazer)', () => {
       terminal: false,
       spawn: false,
       rooms: false,
+      push: true,
       world: false,
     });
-    expect(JSON.parse((await request(h.localBase, '/api/access')).body)).toEqual({ remote: false, local: true, permissions: true, messages: true, terminal: false, spawn: true, rooms: true, world: true });
+    expect(JSON.parse((await request(h.localBase, '/api/access')).body)).toEqual({ remote: false, local: true, permissions: true, messages: true, terminal: false, spawn: true, rooms: true, push: true, world: true });
     expect(JSON.parse((await request(h.localBase, '/api/access', { headers: { Host: '192.168.1.5:4747' } })).body)).toMatchObject({
       local: false,
       permissions: false,
@@ -696,5 +699,21 @@ describe('Estúdio pela porta remota', () => {
       expect(c.status === 403, `personagem ${allow.join()}`).toBe(!ok);
       expect(JSON.parse((await request(s.remoteBase, '/api/access', { headers })).body).rooms, allow.join()).toBe(ok);
     }
+  });
+});
+
+describe('avisos no celular (/api/push)', () => {
+  it('a página remota com login e a local cadastram o aparelho; Host da rede na porta local, não', async () => {
+    const s = await start(['permissions']);
+    const cookie = await login(s.remoteBase);
+    const headers = { Cookie: cookie, Origin: s.remoteBase };
+    const key = JSON.parse((await request(s.remoteBase, '/api/push', { headers })).body).key;
+    expect(Buffer.from(key, 'base64url').length).toBe(65);
+    expect(JSON.parse((await request(s.remoteBase, '/api/access', { headers })).body).push).toBe(true);
+    expect((await request(s.remoteBase, '/api/push/subscribe', { method: 'POST', headers, body: { subscription: { endpoint: 'https://example.com/x' } } })).status).toBe(400);
+    expect((await request(s.remoteBase, '/api/push/test', { method: 'POST', headers, body: { endpoint: 'https://fcm.googleapis.com/x' } })).status).toBe(404);
+    expect((await request(s.localBase, '/api/push')).status).toBe(200);
+    expect((await request(s.localBase, '/api/push', { headers: { Host: '192.168.1.5:4747' } })).status).toBe(403);
+    expect((await request(s.remoteBase, '/api/push')).status).toBe(401);
   });
 });

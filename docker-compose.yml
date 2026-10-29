@@ -48,6 +48,9 @@ services:
       HABBLAUD_REMOTE_TOTP_SECRET: ${HABBLAUD_REMOTE_TOTP_SECRET:-}
       HABBLAUD_REMOTE_ALLOW: ${HABBLAUD_REMOTE_ALLOW:-}
       HABBLAUD_REMOTE_INSECURE_HTTP: ${HABBLAUD_REMOTE_INSECURE_HTTP:-}
+      # Avisos no celular (Web Push; 0 desliga) e o contato do VAPID (mailto: ou https:).
+      HABBLAUD_PUSH: ${HABBLAUD_PUSH:-}
+      HABBLAUD_PUSH_CONTACT: ${HABBLAUD_PUSH_CONTACT:-}
       # Habblaud World (ligado por padrão: server.habblaud.com; nada sai antes de criar a conta). HABBLAUD_WORLD=0 desliga tudo.
       HABBLAUD_WORLD: ${HABBLAUD_WORLD:-}
       HABBLAUD_WORLD_URL: ${HABBLAUD_WORLD_URL:-}
