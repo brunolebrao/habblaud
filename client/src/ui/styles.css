@@ -11484,56 +11484,120 @@ a.ui-link__badge:hover {
   border-color: var(--ui-accent);
   background: var(--ui-accent-soft);
 }
+.ui-studio__3d-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
 .ui-studio__3d-slots {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
+}
+.ui-studio__3d-single {
+  max-width: 260px;
 }
 .ui-studio__3d-go {
   position: sticky;
-  bottom: 0;
-  padding: 8px 0;
+  /* O corpo do Estúdio tem 12px de respiro embaixo: a barra cobre também essa faixa. */
+  bottom: -12px;
+  margin: 0 -14px;
+  padding: 10px 14px 22px;
   background: var(--ui-bg-solid);
   border-top: 1px solid var(--ui-line);
-}
-.ui-studio__3d-single .ui-studio__3d-slots {
-  grid-template-columns: minmax(0, 220px);
 }
 .ui-studio__3d-slot {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--ui-line);
+  border-radius: 10px;
+}
+.ui-studio__3d-slot.is-front {
+  border-color: var(--ui-accent);
+}
+.ui-studio__3d-slot-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
 }
 .ui-studio__3d-label {
+  flex: 1;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--ui-muted);
 }
-.ui-studio__3d-empty {
+.ui-studio__3d-frame {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   aspect-ratio: 1;
-  padding: 8px;
-  border: 1px dashed var(--ui-line);
   border-radius: 8px;
+  overflow: hidden;
+  background: var(--ui-bg-solid);
+}
+.ui-studio__3d-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.ui-studio__3d-frame.is-empty {
+  padding: 10px;
+  border: 1px dashed var(--ui-line);
+  background: transparent;
+}
+.ui-studio__3d-error {
   font-size: 11px;
-  color: var(--ui-muted);
+  color: var(--ui-danger, #e06c6c);
   text-align: center;
   overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
-.ui-studio__3d-empty.is-busy {
-  border-style: solid;
-  border-color: var(--ui-accent);
-  color: var(--ui-text);
-}
-.ui-studio__3d-actions {
+.ui-studio__3d-busy {
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ui-text);
+  background: color-mix(in srgb, var(--ui-bg-solid) 72%, transparent);
+}
+.ui-studio__3d-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--ui-accent-soft);
+  border-top-color: var(--ui-accent);
+  border-radius: 50%;
+  animation: ui-studio-spin 0.9s linear infinite;
+}
+@keyframes ui-studio-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-studio__3d-spinner {
+    animation-duration: 3s;
+  }
 }
 .ui-studio__3d-pick {
   width: 100%;
@@ -11546,8 +11610,12 @@ a.ui-link__badge:hover {
 }
 .ui-studio__status {
   margin: 0;
+  padding: 0 16px 6px;
   font-size: 12px;
   color: var(--ui-faint);
+}
+.ui-studio__status:empty {
+  display: none;
 }
 .ui-studio__jobs {
   display: flex;

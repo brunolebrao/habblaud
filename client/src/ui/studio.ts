@@ -185,6 +185,8 @@ export class Studio implements UiComponent {
   private mode3d: 'single' | 'multi' = 'multi';
   private picks: Partial<Record<ViewKey, string>> = {};
   private armed3d = false;
+  /** Vistas pedidas agora há pouco (mostram "Gerando…" antes de o pedido chegar na lista). */
+  private requesting = new Set<ViewKey>();
   /** Leva uma imagem da galeria ao formulário como base de uma edição (montado com a tela do projeto). */
   private editImage?: (item: StudioItemView | undefined) => void;
 
@@ -605,6 +607,7 @@ export class Studio implements UiComponent {
   private open3d(file: string): void {
     this.model3d = file;
     this.picks = {};
+    this.requesting.clear();
     this.armed3d = false;
     this.editing = false;
     this.rerender();
@@ -640,14 +643,27 @@ export class Studio implements UiComponent {
     const open = (j: StudioJobView) => j.status === 'queued' || j.status === 'sent';
     const jobOf = (k: ViewKey) => s.jobs.find((j) => j.source === front.file && j.view === k && (open(j) || j.status === 'failed'));
     const labels = Object.fromEntries(VIEWS.map(([k, l]) => [k, l()])) as Record<ViewKey, string>;
-    const requestView = (k: ViewKey) => {
-      delete this.picks[k];
-      return call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: front.project, title: `${name.slice(0, 60)} · ${labels[k]}`, source: front.file, view: k }) });
+    // Pede as vistas (prompt pronto); o espaço mostra "Gerando…" já no toque, antes de o pedido aparecer na lista.
+    const requestViews = (keys: ViewKey[]) => {
+      if (this.busy || !keys.length) return;
+      for (const k of keys) {
+        delete this.picks[k];
+        this.requesting.add(k);
+      }
+      this.armed3d = false;
+      this.rerender();
+      void this.act(
+        async () => {
+          for (const k of keys) await call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: front.project, title: `${name.slice(0, 60)} · ${labels[k]}`, source: front.file, view: k }) });
+        },
+        keys.length > 1 ? tr('Gerando {0} vistas: leva de 1 a 3 minutos.', [keys.length]) : tr('Gerando a vista: leva de 1 a 3 minutos.'),
+      ).finally(() => {
+        for (const k of keys) this.requesting.delete(k);
+        this.rerender();
+      });
     };
     const others = s.items.filter((i) => i.file !== front.file && !(i.viewOf && i.viewOf !== front.file));
-    const thumb = (i: StudioItemView) => h('a', { class: 'ui-studio__thumb', attrs: { href: fileUrl(i.file), target: '_blank', rel: 'noopener noreferrer', title: i.title ?? i.file } }, h('img', { attrs: { src: fileUrl(i.file), alt: i.title ?? '' } }));
-    const slot = (label: string, body: HTMLElement, ...actions: HTMLElement[]) =>
-      h('div', { class: 'ui-studio__3d-slot' }, h('span', { class: 'ui-studio__3d-label', text: label }), body, ...(actions.length ? [h('div', { class: 'ui-studio__3d-actions' }, ...actions)] : []));
+    const picture = (i: StudioItemView) => h('img', { attrs: { src: fileUrl(i.file), alt: i.title ?? '', loading: 'lazy' } });
     const small = (text: string, click: () => void, title?: string) => h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text, ...(title ? { title } : {}), on: { click } });
 
     const missing: ViewKey[] = [];
@@ -656,43 +672,53 @@ export class Studio implements UiComponent {
     const slots = VIEWS.map(([k]) => {
       const img = this.viewImage(front.file, k);
       const job = jobOf(k);
-      const running = !!job && open(job);
+      const running = this.requesting.has(k) || (!!job && open(job));
+      const failed = !running && job?.status === 'failed';
       if (running) busy++;
-      if (img) filled++;
+      if (img && !running) filled++;
       if (!img && !running) missing.push(k);
-      const pick = h('select', { class: 'ui-world__select ui-studio__3d-pick', attrs: { 'aria-label': tr('Escolher da galeria: {0}', [labels[k]]) } }, h('option', { text: tr('Escolher da galeria…'), attrs: { value: '' } }), ...others.map((x) => h('option', { text: (x.title ?? x.file.split('/').pop()!).slice(0, 50), attrs: { value: x.file } })));
-      pick.addEventListener('change', () => {
-        if (!pick.value) return;
-        this.picks[k] = pick.value;
-        this.armed3d = false;
-        this.rerender();
-      });
-      const box = img
-        ? thumb(img)
-        : h('div', { class: `ui-studio__3d-empty${running ? ' is-busy' : ''}`, text: running ? tr('Gerando…') : job?.status === 'failed' ? tr('Falhou: {0}', [job.error ?? '']) : tr('Vazia') });
-      const actions = running
+      const tools = running
         ? []
         : img
-          ? [small(tr('Refazer'), () => void this.act(() => requestView(k), tr('Gerando a vista: leva de 1 a 3 minutos.')), tr('Gerar esta vista de novo com o prompt pronto')), small(tr('Tirar'), () => ((this.picks[k] = ''), (this.armed3d = false), this.rerender()))]
-          : [small(tr('Gerar'), () => void this.act(() => requestView(k), tr('Gerando a vista: leva de 1 a 3 minutos.')), tr('Gerar esta vista com o prompt pronto (o mesmo objeto, girado)')), pick];
-      return slot(labels[k], box, ...actions);
+          ? [small(tr('Refazer'), () => requestViews([k]), tr('Gerar esta vista de novo com o prompt pronto')), small(tr('Tirar'), () => ((this.picks[k] = ''), (this.armed3d = false), this.rerender()))]
+          : [];
+      const head = h('div', { class: 'ui-studio__3d-slot-head' }, h('span', { class: 'ui-studio__3d-label', text: labels[k] }), ...tools);
+      let box: HTMLElement;
+      if (img) {
+        box = h('a', { class: 'ui-studio__3d-frame', attrs: { href: fileUrl(img.file), target: '_blank', rel: 'noopener noreferrer', title: img.title ?? img.file } }, picture(img));
+      } else {
+        const pick = h('select', { class: 'ui-world__select ui-studio__3d-pick', attrs: { 'aria-label': tr('Escolher da galeria: {0}', [labels[k]]) } }, h('option', { text: tr('Escolher da galeria…'), attrs: { value: '' } }), ...others.map((x) => h('option', { text: (x.title ?? x.file.split('/').pop()!).slice(0, 50), attrs: { value: x.file } })));
+        pick.addEventListener('change', () => {
+          if (!pick.value) return;
+          this.picks[k] = pick.value;
+          this.armed3d = false;
+          this.rerender();
+        });
+        const gen = h('button', { class: 'ui-btn ui-btn--sm ui-btn--primary', type: 'button', text: tr('Gerar'), title: tr('Gerar esta vista com o prompt pronto (o mesmo objeto, girado)'), on: { click: () => requestViews([k]) } }) as HTMLButtonElement;
+        gen.disabled = !s.available;
+        box = h('div', { class: 'ui-studio__3d-frame is-empty' }, ...(running ? [] : [...(failed ? [h('span', { class: 'ui-studio__3d-error', text: tr('Falhou: {0}', [job?.error ?? '']) })] : []), gen, pick]));
+      }
+      if (running) box.append(h('div', { class: 'ui-studio__3d-busy' }, h('span', { class: 'ui-studio__3d-spinner', attrs: { 'aria-hidden': 'true' } }), h('span', { text: tr('Gerando…') })));
+      return h('div', { class: `ui-studio__3d-slot${running ? ' is-busy' : ''}` }, head, box);
     });
-
-    const genAll = h('button', { class: 'ui-btn', type: 'button', text: tr('Gerar as vistas que faltam ({0})', [missing.length]) }) as HTMLButtonElement;
-    genAll.disabled = !s.available || !missing.length;
-    genAll.addEventListener('click', () =>
-      void this.act(async () => {
-        for (const k of missing) await requestView(k);
-      }, tr('Gerando {0} vistas: leva de 1 a 3 minutos.', [missing.length])),
+    const frontSlot = h(
+      'div',
+      { class: 'ui-studio__3d-slot is-front' },
+      h('div', { class: 'ui-studio__3d-slot-head' }, h('span', { class: 'ui-studio__3d-label', text: tr('Frente') })),
+      h('a', { class: 'ui-studio__3d-frame', attrs: { href: fileUrl(front.file), target: '_blank', rel: 'noopener noreferrer', title: name } }, picture(front)),
     );
+
+    const genAll = h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text: tr('Gerar as vistas que faltam ({0})', [missing.length]), on: { click: () => requestViews(missing) } }) as HTMLButtonElement;
+    genAll.disabled = !s.available;
+    const summary = h('div', { class: 'ui-studio__3d-bar' }, h('span', { text: busy ? tr('{0} de 3 vistas prontas · {1} gerando', [filled, busy]) : tr('{0} de 3 vistas prontas', [filled]) }), ...(missing.length ? [genAll] : []));
     const multiBox = h(
       'div',
       { class: 'ui-studio__3d-multi' },
-      h('div', { class: 'ui-studio__3d-slots' }, slot(tr('Frente'), thumb(front)), ...slots),
-      h('div', { class: 'ui-studio__actions' }, genAll),
-      h('p', { class: 'ui-studio__hint', text: tr('As vistas saem do Codex com um prompt pronto (o mesmo objeto, girado), sem gastar créditos da Tripo. Confira cada uma antes de gerar o modelo: refaça a que sair diferente da frente.') }),
+      summary,
+      h('div', { class: 'ui-studio__3d-slots' }, frontSlot, ...slots),
+      h('p', { class: 'ui-studio__hint', text: tr('Cada vista sai do Codex com um prompt pronto (o mesmo objeto, girado), sem gastar créditos da Tripo. Refaça a que sair diferente da frente.') }),
     );
-    const singleBox = h('div', { class: 'ui-studio__3d-single' }, h('div', { class: 'ui-studio__3d-slots' }, slot(tr('Imagem'), thumb(front))));
+    const singleBox = h('div', { class: 'ui-studio__3d-single' }, h('a', { class: 'ui-studio__3d-frame', attrs: { href: fileUrl(front.file), target: '_blank', rel: 'noopener noreferrer', title: name } }, picture(front)));
 
     const go = h('button', { class: 'ui-btn ui-btn--primary', type: 'button', text: this.armed3d ? tr('Confirmar (gasta créditos)') : tr('Gerar modelo 3D') }) as HTMLButtonElement;
     go.disabled = !s.available || (multi && (busy > 0 || filled === 0));
