@@ -11440,6 +11440,33 @@ a.ui-link__badge:hover {
 .ui-studio__model:hover {
   background: var(--ui-accent);
 }
+.ui-studio__views {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 6px 6px;
+}
+.ui-studio__views-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+.ui-studio__view-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.ui-studio__view-row > span {
+  min-width: 52px;
+}
+.ui-studio__view {
+  flex: 1;
+  min-width: 0;
+}
+.ui-studio__views > .ui-btn {
+  align-self: flex-start;
+}
 .ui-studio__actions {
   display: flex;
   align-items: center;

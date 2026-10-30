@@ -68,8 +68,12 @@ export interface StudioState {
 
 const FILE_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}$/;
 const MODEL_RE = /\.(?:stl|glb|3mf)$/i;
-/** Preço aproximado do modelo 3D no 3D AI Studio (server/studio/model3d.ts: MODEL3D_CREDITS). */
-const MODEL3D_CREDITS = 70;
+/** Vistas extras do modelo 3D multi-view (a imagem do cartão é a frente; server/studio/generate.ts: VIEW_KEYS). */
+const VIEWS = [
+  ['left', () => tr('Esquerda')],
+  ['back', () => tr('Costas')],
+  ['right', () => tr('Direita')],
+] as const;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const STATUSES = ['pending', 'queued', 'sent', 'done', 'failed'];
 
@@ -591,16 +595,37 @@ export class Studio implements UiComponent {
     const models = (i.models ?? []).map((m) =>
       h('a', { class: 'ui-studio__model', text: m.split('.').pop()!.toUpperCase(), attrs: { href: fileUrl(m), download: m.split('/').pop()!, title: tr('Baixar o modelo 3D') } }),
     );
-    const make3d = h('button', { class: 'ui-btn ui-btn--sm ui-studio__make3d', type: 'button', text: tr('Gerar 3D'), title: tr('Transformar esta imagem num modelo 3D para impressão (STL), pelo 3D AI Studio') });
+    const make3d = h('button', { class: 'ui-btn ui-btn--sm ui-studio__make3d', type: 'button', text: tr('Gerar 3D'), title: tr('Transformar esta imagem num modelo 3D para impressão (STL), pela Tripo ou pelo 3D AI Studio') });
+    // Multi-view (opcional): outras imagens do mesmo objeto, de lado e de costas; esta é a frente.
+    const others = this.state.items.filter((x) => x.project === i.project && x.file !== i.file);
+    const selects = VIEWS.map(([key, name]) => {
+      const select = h('select', { class: 'ui-world__select ui-studio__view', attrs: { 'aria-label': name() } }, h('option', { text: '—', attrs: { value: '' } }), ...others.map((x) => h('option', { text: (x.title ?? x.file.split('/').pop()!).slice(0, 60), attrs: { value: x.file } })));
+      return { key, select, row: h('label', { class: 'ui-studio__view-row' }, h('span', { text: name() }), select) };
+    });
+    const cancel3d = h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text: tr('Cancelar') });
+    const views = h('div', { class: 'ui-studio__views' }, ...(others.length ? [h('p', { class: 'ui-studio__views-hint', text: tr('Multi-view (opcional, só pela Tripo): escolha outras imagens do mesmo objeto. Esta é a frente.') }), ...selects.map((x) => x.row)] : []), cancel3d);
+    setHidden(views, true);
     let armed = false;
+    cancel3d.addEventListener('click', () => {
+      armed = false;
+      this.editing = false;
+      setText(make3d, tr('Gerar 3D'));
+      setHidden(views, true);
+    });
     make3d.addEventListener('click', () => {
       if (!armed) {
         armed = true;
-        setText(make3d, tr('Confirmar (~{0} créditos)', [MODEL3D_CREDITS]));
+        this.editing = true;
+        setText(make3d, tr('Confirmar (gasta créditos)'));
+        setHidden(views, false);
         return;
       }
+      const picked = Object.fromEntries(selects.filter((x) => x.select.value).map((x) => [x.key, x.select.value]));
       const title = `${label.slice(0, 70)} (3D)`;
-      void this.act(() => call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: i.project, kind: 'model3d', source: i.file, title }) }), tr('Gerando o modelo 3D: leva de 2 a 8 minutos.'));
+      void this.act(
+        () => call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: i.project, kind: 'model3d', source: i.file, title, ...(Object.keys(picked).length ? { views: picked } : {}) }) }),
+        tr('Gerando o modelo 3D: leva de 2 a 8 minutos.'),
+      );
     });
     make3d.disabled = !this.state.available;
     setHidden(make3d, this.readOnly || models.length > 0);
@@ -610,6 +635,7 @@ export class Studio implements UiComponent {
       link,
       h('figcaption', {}, h('span', { class: 'ui-studio__meta', text: label, attrs: { title: `${i.date}${i.model ? ` · ${i.model}` : ''}` } }), edit, copy),
       h('div', { class: 'ui-studio__models' }, ...models, make3d),
+      views,
     );
   }
 }

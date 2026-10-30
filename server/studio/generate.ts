@@ -31,9 +31,14 @@ export interface StudioRequest {
   source?: string;
   /** Trabalho do Higgsfield que gerou a imagem base (serve de referência sem reenviar o arquivo). */
   sourceJob?: string;
-  /** "model3d": em vez de imagem, o modelo 3D (STL e GLB) da imagem `source`, pelo 3D AI Studio (model3d.ts). */
+  /** "model3d": em vez de imagem, o modelo 3D (STL e GLB) da imagem `source`, pela Tripo (tripo.ts) ou pelo 3D AI Studio (model3d.ts). */
   kind?: 'model3d';
+  /** Modelo 3D multi-view: outras imagens da galeria do projeto com o mesmo objeto visto de lado e de costas (`source` é a frente). */
+  views?: Model3dViews;
 }
+
+export const VIEW_KEYS = ['left', 'back', 'right'] as const;
+export type Model3dViews = Partial<Record<(typeof VIEW_KEYS)[number], string>>;
 
 /** Imagem da galeria: "<projeto>/<data>/<nome>.<png|jpg|webp>". */
 export const SOURCE_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}\.(?:png|jpe?g|webp)$/;
@@ -79,7 +84,20 @@ export function parseStudioRequest(raw: unknown, maxPrompt = PROMPT_MAX): Studio
   }
   if (kind && !source) return { error: tr('escolha a imagem da galeria') };
   const sourceJob = source && typeof r.sourceJob === 'string' && JOB_RE.test(r.sourceJob) ? r.sourceJob : undefined;
-  return { project, title, prompt, ...(source ? { source } : {}), ...(sourceJob ? { sourceJob } : {}), ...(kind ? { kind } : {}) };
+  let views: Model3dViews | undefined;
+  if (r.views !== undefined && r.views !== null) {
+    const v = typeof r.views === 'object' && !Array.isArray(r.views) ? (r.views as Record<string, unknown>) : undefined;
+    if (!kind || !v || Object.keys(v).some((k) => !(VIEW_KEYS as readonly string[]).includes(k))) return { error: tr('vistas inválidas (só no modelo 3D: esquerda, costas, direita)') };
+    for (const k of VIEW_KEYS) {
+      const f = v[k];
+      if (f === undefined || f === null || f === '') continue;
+      if (typeof f !== 'string' || !SOURCE_RE.test(f) || f.includes('..') || !f.startsWith(`${project}/`) || f === source) {
+        return { error: tr('vista inválida (precisa ser outra imagem da galeria deste projeto)') };
+      }
+      (views ??= {})[k] = f;
+    }
+  }
+  return { project, title, prompt, ...(source ? { source } : {}), ...(sourceJob ? { sourceJob } : {}), ...(kind ? { kind } : {}), ...(views ? { views } : {}) };
 }
 
 export function studioRoot(env: NodeJS.ProcessEnv = process.env): string {

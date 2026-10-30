@@ -17,6 +17,7 @@
 // Arquivos e ditado usam rodadas com espera: o Habblaud só responde quando chega trabalho (ou a cada 20 s).
 // Ctrl+C para parar.
 import { createModel3dGenerator, model3dKey } from '../server/studio/model3d';
+import { createTripoGenerator, tripoKey } from '../server/studio/tripo';
 import { statSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -425,16 +426,22 @@ async function main(): Promise<void> {
       const mirror = studioMirror(process.env);
       if (mirror) log(tr('Estúdio: cada imagem também é copiada para {0}', [mirror]));
       const images = createCodexImageGenerator({ codexBin: bin, root: studioRoot(process.env), mirror });
-      // Modelo 3D (botão da galeria): pelo 3D AI Studio, com a chave do usuário (HABBLAUD_3DAI_KEY no .env).
-      const key = model3dKey(process.env);
-      const model3d = key ? createModel3dGenerator({ key, root: studioRoot(process.env), mirror }) : undefined;
-      log(model3d ? tr('Estúdio: modelos 3D pelo 3D AI Studio') : tr('Estúdio: sem HABBLAUD_3DAI_KEY no .env, o botão Gerar 3D não funciona'));
+      // Modelo 3D (botão da galeria), com a chave do usuário no .env: a Tripo (HABBLAUD_TRIPO_KEY, aceita multi-view)
+      // tem a vez; sem ela, o 3D AI Studio (HABBLAUD_3DAI_KEY).
+      const tripo = tripoKey(process.env);
+      const key = tripo ? undefined : model3dKey(process.env);
+      const model3d = tripo
+        ? createTripoGenerator({ key: tripo, root: studioRoot(process.env), mirror })
+        : key
+          ? createModel3dGenerator({ key, root: studioRoot(process.env), mirror })
+          : undefined;
+      log(tripo ? tr('Estúdio: modelos 3D pela Tripo (aceita multi-view)') : model3d ? tr('Estúdio: modelos 3D pelo 3D AI Studio') : tr('Estúdio: sem HABBLAUD_TRIPO_KEY nem HABBLAUD_3DAI_KEY no .env, o botão Gerar 3D não funciona'));
       const generate: StudioGenerator = (req) =>
         req.kind !== 'model3d'
           ? images(req)
           : model3d
             ? model3d(req)
-            : Promise.reject(new Error(tr('falta a chave do 3D AI Studio: ponha HABBLAUD_3DAI_KEY no .env do Habblaud e reinicie o auxiliar')));
+            : Promise.reject(new Error(tr('falta a chave do 3D: ponha HABBLAUD_TRIPO_KEY (Tripo) ou HABBLAUD_3DAI_KEY (3D AI Studio) no .env do Habblaud e reinicie o auxiliar')));
       void waitLoop(() => studioRound(waitPost, generate, log, { wait: true, guides: (projects) => writeProjectGuides(studioRoot(process.env), projects) }));
     }
   }

@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameS
 import { dirname, extname, join, sep } from 'node:path';
 import { tr } from '../../shared/i18n';
 import { HostWait, pollWithWait } from '../host-wait';
-import { parseStudioRequest, projectSlug, type StudioGenerator, type StudioRequest } from './generate';
+import { parseStudioRequest, projectSlug, type Model3dViews, type StudioGenerator, type StudioRequest } from './generate';
 
 export const HOST_PRESENCE_MS = 10_000;
 const QUEUED_TIMEOUT_MS = 60_000;
@@ -51,6 +51,8 @@ export interface StudioJob {
   source?: string;
   /** "model3d": o modelo 3D (STL e GLB) da imagem `source`; só pelo painel. Ausente = imagem. */
   kind?: 'model3d';
+  /** Modelo 3D multi-view: as outras vistas da galeria (`source` é a frente). */
+  views?: Model3dViews;
   status: StudioJobStatus;
   at: number;
   /** Quem pediu (o agente diz o próprio nome; só para mostrar). Ausente = o painel. */
@@ -277,7 +279,7 @@ export class StudioService {
     const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
     const requestedBy = opts.direct ? undefined : (str(r.requestedBy, BY_MAX) ?? tr('um agente'));
     const session = !opts.direct && typeof r.session === 'string' && SESSION_RE.test(r.session) ? r.session : undefined;
-    // O modelo 3D gasta créditos do 3D AI Studio: só você, pelo painel.
+    // O modelo 3D gasta créditos (Tripo ou 3D AI Studio): só você, pelo painel.
     if (req.kind && !opts.direct) return { error: 'invalid', reason: tr('o modelo 3D só sai pelo painel do Estúdio') };
     if (opts.direct) {
       const busy = this.busy();
@@ -286,11 +288,12 @@ export class StudioService {
       return { error: 'too-many', reason: tr('pedidos demais esperando no Estúdio: aprove ou descarte alguns') };
     }
     if (req.source && !existsSync(join(this.opts.root, req.source))) return { error: 'invalid', reason: tr('a imagem base não está mais na galeria') };
+    if (Object.values(req.views ?? {}).some((f) => !existsSync(join(this.opts.root, f)))) return { error: 'invalid', reason: tr('uma das vistas não está mais na galeria') };
     if (!this.projectsBySlug.has(req.project)) {
       if (this.projectsBySlug.size >= MAX_PROJECTS) return { error: 'too-many', reason: tr('projetos demais') };
       this.projectsBySlug.set(req.project, { slug: req.project, name: req.project, updatedAt: this.now() });
     }
-    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, ...(req.source ? { source: req.source } : {}), ...(req.kind ? { kind: req.kind } : {}), status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
+    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, ...(req.source ? { source: req.source } : {}), ...(req.kind ? { kind: req.kind } : {}), ...(req.views ? { views: req.views } : {}), status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
     const entry: Entry = { job, touched: this.now() };
     this.entries.set(job.id, entry);
     if (opts.direct) this.start(entry);
@@ -304,7 +307,7 @@ export class StudioService {
     const e = this.entries.get(id);
     if (!e || e.job.status !== 'pending') return { error: 'unknown', reason: tr('pedido desconhecido (já aprovado ou descartado?)') };
     const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt, source: e.job.source, kind: e.job.kind });
+    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt, source: e.job.source, kind: e.job.kind, views: e.job.views });
     if ('error' in req) return { error: 'invalid', reason: req.error };
     const busy = this.busy();
     if (busy) return busy;
@@ -404,7 +407,7 @@ export class StudioService {
   }
 
   private request(job: StudioJob): StudioRequest {
-    if (job.kind === 'model3d') return { project: job.project, title: job.title, prompt: '', source: job.source, kind: 'model3d' };
+    if (job.kind === 'model3d') return { project: job.project, title: job.title, prompt: '', source: job.source, kind: 'model3d', ...(job.views ? { views: job.views } : {}) };
     return { project: job.project, title: job.title, prompt: composePrompt(job.prompt, this.projectsBySlug.get(job.project)?.style), ...(job.source ? { source: job.source } : {}) };
   }
 

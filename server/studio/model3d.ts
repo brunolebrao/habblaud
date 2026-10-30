@@ -6,7 +6,8 @@
 //   3. POST /v1/tools/convert/ {model_url: <glb>, output_format: "stl"}            -> task_id (10 créditos)
 //   4. Baixa o .glb e o .stl para o lado da imagem: <nome>.glb, <nome>.stl e <nome>.3d.json.
 //
-// A chave (HABBLAUD_3DAI_KEY) é do usuário: vem do ambiente ou do .env do Habblaud, nunca de um pedido.
+// A chave (HABBLAUD_3DAI_KEY) é do usuário: vem do ambiente ou do .env do Habblaud, nunca de um pedido. Com a chave da
+// Tripo (tripo.ts), é ela quem gera; daqui também saem as partes comuns (chave, download, metadados).
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { isImageFile, mirrorFiles, type StudioGenerator } from './generate';
@@ -22,19 +23,50 @@ const MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg'
 /** Preço aproximado (créditos) de imagem -> STL: Hunyuan 3.1 Pro (60) + conversão (10). */
 export const MODEL3D_CREDITS = 70;
 
-/** A chave do 3D AI Studio: HABBLAUD_3DAI_KEY do ambiente ou da linha dela no .env (sem expandir nada). */
-export function model3dKey(env: NodeJS.ProcessEnv = process.env, envFile = join(process.cwd(), '.env')): string | undefined {
-  const direct = env.HABBLAUD_3DAI_KEY?.trim();
+/** Chave de API do usuário: a variável do ambiente ou a linha dela no .env (sem expandir nada). */
+export function envKey(name: string, env: NodeJS.ProcessEnv = process.env, envFile = join(process.cwd(), '.env')): string | undefined {
+  const direct = env[name]?.trim();
   if (direct) return direct;
   try {
     const line = readFileSync(envFile, 'utf8')
       .split('\n')
-      .find((l) => /^\s*HABBLAUD_3DAI_KEY\s*=/.test(l));
+      .find((l) => new RegExp(`^\\s*${name}\\s*=`).test(l));
     const v = line?.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2');
     return v || undefined;
   } catch {
     return undefined;
   }
+}
+
+/** A chave do 3D AI Studio: HABBLAUD_3DAI_KEY. */
+export const model3dKey = (env: NodeJS.ProcessEnv = process.env, envFile?: string) => envKey('HABBLAUD_3DAI_KEY', env, envFile);
+
+/** Baixa um modelo pronto (https, até 300 MB) e grava com troca atômica. */
+export async function downloadModel(doFetch: typeof fetch, url: string, target: string): Promise<void> {
+  if (!url.startsWith('https://')) throw new Error(tr('endereço do modelo inválido'));
+  const res = await doFetch(url);
+  if (!res.ok) throw new Error(tr('não deu para baixar o modelo ({0})', [res.status]));
+  const data = Buffer.from(await res.arrayBuffer());
+  if (!data.length || data.length > DOWNLOAD_MAX_BYTES) throw new Error(tr('modelo vazio ou grande demais'));
+  const tmp = `${target}.${process.pid}.tmp`;
+  writeFileSync(tmp, data, { flag: 'wx' });
+  renameSync(tmp, target);
+}
+
+/** Grava <nome>.3d.json e copia os arquivos para o espelho (Google Drive). */
+export function finishModel(opts: { root: string; mirror?: string; now?: () => Date }, source: string, stem: string, title: string, model: string, extra: Record<string, unknown> = {}): void {
+  const files = [`${stem}.glb`, `${stem}.stl`];
+  const meta = { source, title, model, ...extra, createdAt: (opts.now?.() ?? new Date()).toISOString(), files };
+  writeFileSync(join(opts.root, `${stem}.3d.json`), `${JSON.stringify(meta, null, 2)}\n`);
+  if (opts.mirror) mirrorFiles(opts.root, opts.mirror, [...files, `${stem}.3d.json`]);
+}
+
+/** A imagem da galeria que vira modelo: caminho absoluto e o nome sem extensão. */
+export function modelSource(root: string, rel: string | undefined): { path: string; stem: string } {
+  if (!rel) throw new Error(tr('escolha a imagem da galeria'));
+  const path = join(root, rel);
+  if (!existsSync(path) || !isImageFile(path)) throw new Error(tr('a imagem base não está mais na galeria'));
+  return { path, stem: rel.slice(0, -extname(path).length) };
 }
 
 export interface Model3dOptions {
@@ -93,31 +125,16 @@ export function createModel3dGenerator(opts: Model3dOptions): StudioGenerator {
     }
   };
 
-  const download = async (url: string, target: string): Promise<void> => {
-    if (!url.startsWith('https://')) throw new Error(tr('endereço do modelo inválido'));
-    const res = await doFetch(url);
-    if (!res.ok) throw new Error(tr('não deu para baixar o modelo ({0})', [res.status]));
-    const data = Buffer.from(await res.arrayBuffer());
-    if (!data.length || data.length > DOWNLOAD_MAX_BYTES) throw new Error(tr('modelo vazio ou grande demais'));
-    const tmp = `${target}.${process.pid}.tmp`;
-    writeFileSync(tmp, data, { flag: 'wx' });
-    renameSync(tmp, target);
-  };
-
   return async (req) => {
-    if (!req.source) throw new Error(tr('escolha a imagem da galeria'));
-    const image = join(opts.root, req.source);
-    if (!existsSync(image) || !isImageFile(image)) throw new Error(tr('a imagem base não está mais na galeria'));
+    if (req.views && Object.keys(req.views).length) throw new Error(tr('multi-view só pela Tripo: ponha HABBLAUD_TRIPO_KEY no .env do Habblaud e reinicie o auxiliar'));
+    const { path: image, stem } = modelSource(opts.root, req.source);
     const ext = extname(image).toLowerCase();
-    const stem = req.source.slice(0, -ext.length);
     const dataUri = `data:${MIME[ext] ?? 'image/png'};base64,${readFileSync(image).toString('base64')}`;
     const glbUrl = await task('/v1/3d-models/tencent/generate/pro/', { model: '3.1', image: dataUri, enable_pbr: false });
-    await download(glbUrl, join(opts.root, `${stem}.glb`));
+    await downloadModel(doFetch, glbUrl, join(opts.root, `${stem}.glb`));
     const stlUrl = await task('/v1/tools/convert/', { model_url: glbUrl, output_format: 'stl' });
-    await download(stlUrl, join(opts.root, `${stem}.stl`));
-    const meta = { source: req.source, title: req.title, model: 'hunyuan-3.1-pro', createdAt: (opts.now?.() ?? new Date()).toISOString(), files: [`${stem}.glb`, `${stem}.stl`] };
-    writeFileSync(join(opts.root, `${stem}.3d.json`), `${JSON.stringify(meta, null, 2)}\n`);
-    if (opts.mirror) mirrorFiles(opts.root, opts.mirror, [`${stem}.glb`, `${stem}.stl`, `${stem}.3d.json`]);
-    return { file: req.source };
+    await downloadModel(doFetch, stlUrl, join(opts.root, `${stem}.stl`));
+    finishModel(opts, req.source!, stem, req.title, 'hunyuan-3.1-pro');
+    return { file: req.source! };
   };
 }
