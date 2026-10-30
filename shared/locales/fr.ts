@@ -3572,4 +3572,10 @@ export const FR: Readonly<Record<string, string>> = {
   "{0} de 3 vistas prontas · {1} gerando": "{0} vues sur 3 prêtes · {1} en cours",
   "{0} de 3 vistas prontas": "{0} vues sur 3 prêtes",
   "Cada vista sai do Codex com um prompt pronto (o mesmo objeto, girado), sem gastar créditos da Tripo. Refaça a que sair diferente da frente.": "Chaque vue vient de Codex avec un prompt tout prêt (le même objet, tourné), sans dépenser de crédits Tripo. Refaites celle qui ne correspond pas à l'avant.",
+  "~{0} créditos": "~{0} crédits",
+  "Confirmar: {0} créditos": "Confirmer : {0} crédits",
+  "Custa ~{0} créditos ({1}) · saldo: {2}": "Coûte ~{0} crédits ({1}) · solde : {2}",
+  "Custa ~{0} créditos ({1})": "Coûte ~{0} crédits ({1})",
+  "Falta a chave do 3D: HABBLAUD_TRIPO_KEY no .env do Habblaud.": "Clé 3D manquante : HABBLAUD_TRIPO_KEY dans le .env de Habblaud.",
+  "Multi-view só pela Tripo: ponha HABBLAUD_TRIPO_KEY no .env do Habblaud.": "La multi-vue nécessite Tripo : mettez HABBLAUD_TRIPO_KEY dans le .env de Habblaud.",
 };

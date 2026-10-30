@@ -16,8 +16,8 @@
 // anexos) e transcreve o ditado com o Whisper local (whisper-cli + ffmpeg + modelo; ver server/dictation/whisper.ts).
 // Arquivos e ditado usam rodadas com espera: o Habblaud só responde quando chega trabalho (ou a cada 20 s).
 // Ctrl+C para parar.
-import { createModel3dGenerator, model3dKey } from '../server/studio/model3d';
-import { createTripoGenerator, tripoKey } from '../server/studio/tripo';
+import { createModel3dGenerator, MODEL3D_CREDITS, model3dKey } from '../server/studio/model3d';
+import { createTripoGenerator, tripoBalance, tripoKey, TRIPO_CREDITS } from '../server/studio/tripo';
 import { statSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -436,11 +436,22 @@ async function main(): Promise<void> {
           ? createModel3dGenerator({ key, root: studioRoot(process.env), mirror })
           : undefined;
       log(tripo ? tr('Estúdio: modelos 3D pela Tripo (aceita multi-view)') : model3d ? tr('Estúdio: modelos 3D pelo 3D AI Studio') : tr('Estúdio: sem HABBLAUD_TRIPO_KEY nem HABBLAUD_3DAI_KEY no .env, o botão Gerar 3D não funciona'));
+      // Conta ao painel quem gera o 3D, quanto custa e o saldo (Tripo): no começo, depois de cada modelo e a cada 10 min.
+      const report3d = async () => {
+        const info = tripo
+          ? { provider: 'tripo', ...TRIPO_CREDITS, balance: await tripoBalance(tripo) }
+          : model3d
+            ? { provider: '3dai', single: MODEL3D_CREDITS }
+            : { provider: 'none' };
+        await post('/api/host/studio/ack', { results: [], model3d: info }).catch(() => {});
+      };
+      void report3d();
+      setInterval(() => void report3d(), 10 * 60_000).unref();
       const generate: StudioGenerator = (req) =>
         req.kind !== 'model3d'
           ? images(req)
           : model3d
-            ? model3d(req)
+            ? model3d(req).finally(() => void report3d())
             : Promise.reject(new Error(tr('falta a chave do 3D: ponha HABBLAUD_TRIPO_KEY (Tripo) ou HABBLAUD_3DAI_KEY (3D AI Studio) no .env do Habblaud e reinicie o auxiliar')));
       void waitLoop(() => studioRound(waitPost, generate, log, { wait: true, guides: (projects) => writeProjectGuides(studioRoot(process.env), projects) }));
     }

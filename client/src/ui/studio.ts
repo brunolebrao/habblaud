@@ -66,8 +66,17 @@ export interface StudioProjectView {
   folder?: string;
 }
 
+/** Quem gera o modelo 3D, o preço e o saldo, como o auxiliar contou (server/studio/studio.ts: Model3dInfo). */
+export interface Model3dInfoView {
+  provider: 'tripo' | '3dai' | 'none';
+  balance?: number;
+  single?: number;
+  multi?: number;
+}
+
 export interface StudioState {
   available: boolean;
+  model3d?: Model3dInfoView;
   projects: StudioProjectView[];
   jobs: StudioJobView[];
   items: StudioItemView[];
@@ -82,6 +91,8 @@ const VIEWS = [
   ['right', () => tr('Direita')],
 ] as const;
 export type ViewKey = (typeof VIEWS)[number][0];
+/** "20", "12,5" (créditos podem ter centavos). */
+const fmtCredits = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 const viewKey = (v: unknown): ViewKey | undefined => VIEWS.find(([k]) => k === v)?.[0];
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const STATUSES = ['pending', 'queued', 'sent', 'done', 'failed'];
@@ -114,7 +125,11 @@ export function parseStudio(raw: unknown): StudioState {
     if (!slug || !SLUG_RE.test(slug)) return [];
     return [{ slug, name: str(x.name) ?? slug, description: str(x.description), style: str(x.style), count: Number(x.count) || 0, cover: file(x.cover), pending: Number(x.pending) || 0, updatedAt: Number(x.updatedAt) || 0, folder: str(x.folder) }];
   });
-  return { available: o.available === true, projects, jobs, items };
+  const m = rec(o.model3d);
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
+  const model3d: Model3dInfoView | undefined =
+    m.provider === 'tripo' || m.provider === '3dai' || m.provider === 'none' ? { provider: m.provider, balance: num(m.balance), single: num(m.single), multi: num(m.multi) } : undefined;
+  return { available: o.available === true, projects, jobs, items, ...(model3d ? { model3d } : {}) };
 }
 
 export function fileUrl(f: string): string {
@@ -316,7 +331,7 @@ export class Studio implements UiComponent {
     if (this.readOnly) setText(this.status, tr('Só para ver: gerar, aprovar e editar imagens pelo próprio computador (https://habblaud.localhost).'));
     else if (!s.available && !this.status.textContent) setText(this.status, tr('Sem o Codex agora: o auxiliar do computador (npm run codex:bridge) parou ou o Codex não está instalado.'));
     // Com um formulário sendo preenchido, não refaz a tela (só quando algo muda de verdade).
-    const key = JSON.stringify([this.project, s.available, s.projects, s.jobs.map((j) => [j.id, j.status, j.error]), s.items.map((i) => i.file)]);
+    const key = JSON.stringify([this.project, s.available, s.model3d, s.projects, s.jobs.map((j) => [j.id, j.status, j.error]), s.items.map((i) => i.file)]);
     if (key === this.lastKey || this.editing) return;
     this.lastKey = key;
     this.body.replaceChildren(...(p ? this.projectView(p) : this.home()));
@@ -638,7 +653,16 @@ export class Studio implements UiComponent {
         h('strong', { text: label }),
         h('span', { text: desc }),
       );
-    const modes = h('div', { class: 'ui-studio__3d-modes' }, mode('multi', tr('Multi-view'), tr('Melhor forma: frente, lados e costas. Só pela Tripo.')), mode('single', tr('Uma imagem'), tr('Mais rápido: a IA imagina os outros lados.')));
+    const info = s.model3d;
+    const service = info?.provider === 'tripo' ? 'Tripo' : info?.provider === '3dai' ? '3D AI Studio' : '';
+    const price = (n: number | undefined) => (n === undefined ? '' : tr('~{0} créditos', [fmtCredits(n)]));
+    const cost = multi ? info?.multi : info?.single;
+    const modes = h(
+      'div',
+      { class: 'ui-studio__3d-modes' },
+      mode('multi', tr('Multi-view'), [tr('Melhor forma: frente, lados e costas. Só pela Tripo.'), info?.provider === 'tripo' ? price(info.multi) : ''].filter(Boolean).join(' · ')),
+      mode('single', tr('Uma imagem'), [tr('Mais rápido: a IA imagina os outros lados.'), price(info?.single)].filter(Boolean).join(' · ')),
+    );
 
     const open = (j: StudioJobView) => j.status === 'queued' || j.status === 'sent';
     const jobOf = (k: ViewKey) => s.jobs.find((j) => j.source === front.file && j.view === k && (open(j) || j.status === 'failed'));
@@ -720,9 +744,23 @@ export class Studio implements UiComponent {
     );
     const singleBox = h('div', { class: 'ui-studio__3d-single' }, h('a', { class: 'ui-studio__3d-frame', attrs: { href: fileUrl(front.file), target: '_blank', rel: 'noopener noreferrer', title: name } }, picture(front)));
 
-    const go = h('button', { class: 'ui-btn ui-btn--primary', type: 'button', text: this.armed3d ? tr('Confirmar (gasta créditos)') : tr('Gerar modelo 3D') }) as HTMLButtonElement;
-    go.disabled = !s.available || (multi && (busy > 0 || filled === 0));
-    const why = multi && busy ? tr('Espere as vistas terminarem.') : multi && !filled ? tr('Gere ou escolha pelo menos uma vista.') : '';
+    const noKey = info?.provider === 'none';
+    const multiOff = multi && info?.provider === '3dai';
+    const go = h('button', { class: 'ui-btn ui-btn--primary', type: 'button', text: this.armed3d ? (cost === undefined ? tr('Confirmar (gasta créditos)') : tr('Confirmar: {0} créditos', [fmtCredits(cost)])) : tr('Gerar modelo 3D') }) as HTMLButtonElement;
+    go.disabled = !s.available || noKey || multiOff || (multi && (busy > 0 || filled === 0));
+    const why = noKey
+      ? tr('Falta a chave do 3D: HABBLAUD_TRIPO_KEY no .env do Habblaud.')
+      : multiOff
+        ? tr('Multi-view só pela Tripo: ponha HABBLAUD_TRIPO_KEY no .env do Habblaud.')
+        : multi && busy
+          ? tr('Espere as vistas terminarem.')
+          : multi && !filled
+            ? tr('Gere ou escolha pelo menos uma vista.')
+            : cost !== undefined
+              ? info?.balance !== undefined
+                ? tr('Custa ~{0} créditos ({1}) · saldo: {2}', [fmtCredits(cost), service, fmtCredits(info.balance)])
+                : tr('Custa ~{0} créditos ({1})', [fmtCredits(cost), service])
+              : '';
     go.addEventListener('click', () => {
       if (!this.armed3d) {
         this.armed3d = true;

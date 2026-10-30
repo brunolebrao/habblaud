@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseStudioRequest } from './generate';
-import { listGallery, StudioService } from './studio';
+import { listGallery, parseModel3dInfo, StudioService } from './studio';
 import { createTripoGenerator, tripoKey } from './tripo';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
@@ -132,5 +132,17 @@ describe('vistas geradas com o prompt pronto', () => {
     studio.poll();
     expect(studio.submit({ project: 'p', title: 'A · Esquerda', source: 'p/2026-10-29/a.png', view: 'left' }, { direct: true })).toHaveProperty('job');
     expect(studio.poll()[0]).toMatchObject({ view: 'left', source: 'p/2026-10-29/a.png' });
+  });
+});
+
+describe('preço e saldo do 3D no painel', () => {
+  it('o auxiliar conta o serviço, o preço e o saldo; o painel só vê enquanto ele está por perto', () => {
+    const studio = new StudioService({ root: setup() });
+    expect(studio.model3d()).toBeUndefined();
+    studio.ack({ results: [], model3d: { provider: 'tripo', single: 25, multi: 25, balance: 975.5 } });
+    expect(studio.model3d()).toEqual({ provider: 'tripo', single: 25, multi: 25, balance: 975.5 });
+    studio.ack({ results: [], model3d: { provider: 'outro', balance: -1 } });
+    expect(studio.model3d()?.provider).toBe('tripo');
+    expect(parseModel3dInfo({ provider: 'none', balance: 'muito' })).toEqual({ provider: 'none' });
   });
 });

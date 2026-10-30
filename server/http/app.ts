@@ -594,7 +594,7 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
       else if (path === '/api/studio' && isRead) {
         const project = url.searchParams.get('project') ?? undefined;
         if (viewOnly) sendJson(res, 200, { available: false, readOnly: true, projects: studio.projects().map(({ folder: _folder, ...p }) => ({ ...p, pending: 0 })), jobs: [], items: studio.gallery(project) });
-        else sendJson(res, 200, { available: studio.available(), projects: studio.projects(), jobs: studio.jobs(project), items: studio.gallery(project) });
+        else sendJson(res, 200, { available: studio.available(), projects: studio.projects(), jobs: studio.jobs(project), items: studio.gallery(project), model3d: studio.model3d() });
       } else if (path === '/api/studio' && method === 'POST') {
         readJson(req, 64 * 1024).then((body) => reply(studio.submit(body, { direct: fromPanel }), true), (err) => fail(res, err));
       } else if (path === '/api/studio/projects' && isRead) sendJson(res, 200, { projects: studio.projects() });

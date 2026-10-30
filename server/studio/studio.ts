@@ -67,6 +67,27 @@ export interface StudioJob {
   error?: string;
 }
 
+/** Quem gera o modelo 3D, como o auxiliar contou (só depois que ele aparece): o painel mostra o preço e o saldo. */
+export interface Model3dInfo {
+  provider: 'tripo' | '3dai' | 'none';
+  /** Saldo de créditos na conta do serviço (quando o serviço conta). */
+  balance?: number;
+  /** Créditos de um modelo com uma imagem e com multi-view (geração + STL). */
+  single?: number;
+  multi?: number;
+}
+
+const credits = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1e9 ? Math.round(v * 100) / 100 : undefined);
+
+export function parseModel3dInfo(raw: unknown): Model3dInfo | undefined {
+  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : undefined;
+  if (!r || (r.provider !== 'tripo' && r.provider !== '3dai' && r.provider !== 'none')) return undefined;
+  const balance = credits(r.balance);
+  const single = credits(r.single);
+  const multi = credits(r.multi);
+  return { provider: r.provider, ...(balance !== undefined ? { balance } : {}), ...(single !== undefined ? { single } : {}), ...(multi !== undefined ? { multi } : {}) };
+}
+
 export interface StudioProject {
   slug: string;
   name: string;
@@ -221,6 +242,7 @@ export class StudioService {
   private readonly entries = new Map<string, Entry>();
   private readonly projectsBySlug = new Map<string, StudioProject>();
   private readonly host: HostWait;
+  private model3dInfo?: Model3dInfo;
   private readonly now: () => number;
 
   constructor(private readonly opts: StudioServiceOptions) {
@@ -393,8 +415,15 @@ export class StudioService {
     return pollWithWait(this.host, () => this.poll(), ms, signal);
   }
 
+  /** O que o auxiliar contou do modelo 3D (serviço, preço e saldo); só enquanto ele está por perto. */
+  model3d(): Model3dInfo | undefined {
+    return this.host.present() ? this.model3dInfo : undefined;
+  }
+
   ack(raw: unknown): void {
     this.host.seen();
+    const info = parseModel3dInfo(raw && typeof raw === 'object' ? (raw as { model3d?: unknown }).model3d : undefined);
+    if (info) this.model3dInfo = info;
     const list = raw && typeof raw === 'object' && Array.isArray((raw as { results?: unknown }).results) ? (raw as { results: unknown[] }).results : [];
     for (const r of list) {
       const x = r && typeof r === 'object' ? (r as Record<string, unknown>) : {};

@@ -23,6 +23,21 @@ const TASK_TIMEOUT_MS = 20 * 60_000;
 const UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 const MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 const FAILED = ['failed', 'banned', 'expired', 'cancelled'];
+const CONVERT_CREDITS = 5;
+
+/** Preço (créditos da Tripo) de um modelo só com a forma, já com a conversão para STL. Visto na conta (out/2026): geração 20 e conversão 5; o multi-view sem textura custa o mesmo que uma imagem. */
+export const TRIPO_CREDITS = { single: 20 + CONVERT_CREDITS, multi: 20 + CONVERT_CREDITS };
+
+/** Saldo da conta na Tripo (GET /v3/account/balance), ou undefined se não deu para saber. */
+export async function tripoBalance(key: string, doFetch: typeof fetch = fetch): Promise<number | undefined> {
+  try {
+    const res = await doFetch(`${API}/account/balance`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000) });
+    const j = (await res.json()) as { code?: number; data?: { balance?: unknown } };
+    return res.ok && j.code === 0 && typeof j.data?.balance === 'number' ? j.data.balance : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** A chave da Tripo: HABBLAUD_TRIPO_KEY. */
 export const tripoKey = (env: NodeJS.ProcessEnv = process.env, envFile?: string) => envKey('HABBLAUD_TRIPO_KEY', env, envFile);
