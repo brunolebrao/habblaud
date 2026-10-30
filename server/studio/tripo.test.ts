@@ -52,7 +52,7 @@ describe('modelo 3D pela Tripo', () => {
     const { fake, calls } = fakeApi();
     const out = await createTripoGenerator({ key: 'k-test', root, mirror, fetch: fake, sleep: async () => {} })(req);
     expect(out.file).toBe('p/2026-10-29/a.png');
-    expect(calls[0]!.url).toBe('https://openapi.tripo3d.com/v3/files');
+    expect(calls[0]!.url).toBe('https://openapi.tripo3d.ai/v3/files');
     expect(calls[0]!.auth).toBe('Bearer k-test');
     expect((calls[0]!.form!.get('file') as File).name).toBe('a.png');
     expect(calls.find((c) => c.url.endsWith('/image-to-model'))!.body).toEqual({ model: 'v3.1-20260211', texture: false, pbr: false, input: 'file_1' });

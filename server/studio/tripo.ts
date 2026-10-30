@@ -1,4 +1,4 @@
-// Imagem da galeria -> modelo 3D para impressão, pela API da Tripo (https://developers.tripo3d.com, v3). Roda no
+// Imagem da galeria -> modelo 3D para impressão, pela API da Tripo (https://developers.tripo3d.ai, v3). Roda no
 // auxiliar do host, só a pedido do painel. Aceita uma imagem (a frente) ou multi-view (frente + esquerda/costas/direita).
 //
 //   1. POST /v3/files (multipart) para cada imagem                                    -> file_token
@@ -14,7 +14,8 @@ import { tr } from '../../shared/i18n';
 import { VIEW_KEYS, type StudioGenerator } from './generate';
 import { downloadModel, envKey, finishModel, modelSource } from './model3d';
 
-const API = 'https://openapi.tripo3d.com/v3';
+/** Conta internacional (platform.tripo3d.ai); a da China continental usa openapi.tripo3d.com e recusa estas chaves. */
+const API = 'https://openapi.tripo3d.ai/v3';
 const MODEL = 'v3.1-20260211';
 const POLL_MS = 5_000;
 /** Geração de 1 a 5 min e conversão de ~1 min; o Estúdio dá 45 min ao pedido (studio.ts). */
