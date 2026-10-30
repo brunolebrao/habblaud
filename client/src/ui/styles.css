@@ -11440,32 +11440,104 @@ a.ui-link__badge:hover {
 .ui-studio__model:hover {
   background: var(--ui-accent);
 }
-.ui-studio__views {
+.ui-studio__3d {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 0 6px 6px;
+  gap: 12px;
+  padding: 0 14px 14px;
 }
-.ui-studio__views-hint {
+.ui-studio__3d-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ui-studio__3d-head .ui-studio__h {
   margin: 0;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-studio__3d-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ui-studio__3d-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ui-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ui-studio__3d-mode span {
   font-size: 11px;
   color: var(--ui-muted);
 }
-.ui-studio__view-row {
+.ui-studio__3d-mode.is-on {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+}
+.ui-studio__3d-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.ui-studio__3d-go {
+  position: sticky;
+  bottom: 0;
+  padding: 8px 0;
+  background: var(--ui-bg-solid);
+  border-top: 1px solid var(--ui-line);
+}
+.ui-studio__3d-single .ui-studio__3d-slots {
+  grid-template-columns: minmax(0, 220px);
+}
+.ui-studio__3d-slot {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-}
-.ui-studio__view-row > span {
-  min-width: 52px;
-}
-.ui-studio__view {
-  flex: 1;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
 }
-.ui-studio__views > .ui-btn {
-  align-self: flex-start;
+.ui-studio__3d-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ui-muted);
+}
+.ui-studio__3d-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 8px;
+  border: 1px dashed var(--ui-line);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--ui-muted);
+  text-align: center;
+  overflow: hidden;
+}
+.ui-studio__3d-empty.is-busy {
+  border-style: solid;
+  border-color: var(--ui-accent);
+  color: var(--ui-text);
+}
+.ui-studio__3d-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ui-studio__3d-pick {
+  width: 100%;
+  min-width: 0;
 }
 .ui-studio__actions {
   display: flex;

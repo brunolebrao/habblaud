@@ -35,10 +35,27 @@ export interface StudioRequest {
   kind?: 'model3d';
   /** Modelo 3D multi-view: outras imagens da galeria do projeto com o mesmo objeto visto de lado e de costas (`source` é a frente). */
   views?: Model3dViews;
+  /** Vista para o multi-view: esta imagem é o objeto de `source` visto deste lado (sem prompt, vai o pronto: VIEW_PROMPTS). */
+  view?: ViewKey;
 }
 
 export const VIEW_KEYS = ['left', 'back', 'right'] as const;
-export type Model3dViews = Partial<Record<(typeof VIEW_KEYS)[number], string>>;
+export type ViewKey = (typeof VIEW_KEYS)[number];
+export type Model3dViews = Partial<Record<ViewKey, string>>;
+
+/** O prompt pronto de cada vista: o mesmo objeto da imagem base, girado, para o multi-view do modelo 3D. */
+const VIEW_SIDES: Record<ViewKey, string> = {
+  left: 'visto de LADO, mostrando o lado ESQUERDO dele (objeto girado 90°; vista lateral esquerda)',
+  back: 'visto de COSTAS (objeto girado 180°; vista traseira)',
+  right: 'visto de LADO, mostrando o lado DIREITO dele (objeto girado 90° para o outro lado; vista lateral direita)',
+};
+export const VIEW_PROMPTS: Record<ViewKey, string> = Object.fromEntries(
+  VIEW_KEYS.map((k) => [
+    k,
+    `Vista de referência para modelagem 3D (turnaround): o MESMO objeto da imagem base, idêntico em forma, proporções, detalhes, cores, material e estilo, agora ${VIEW_SIDES[k]}. ` +
+      'Câmera na mesma altura e distância da imagem base, sem perspectiva exagerada, objeto inteiro e centralizado, mesmo fundo liso, sem sombra no chão, sem texto. Não invente partes novas.',
+  ]),
+) as Record<ViewKey, string>;
 
 /** Imagem da galeria: "<projeto>/<data>/<nome>.<png|jpg|webp>". */
 export const SOURCE_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}\.(?:png|jpe?g|webp)$/;
@@ -69,7 +86,12 @@ export function parseStudioRequest(raw: unknown, maxPrompt = PROMPT_MAX): Studio
   const project = typeof r.project === 'string' ? projectSlug(r.project) : '';
   if (!PROJECT_RE.test(project)) return { error: tr('projeto inválido (letras, números e hífens)') };
   const kind = r.kind === 'model3d' ? 'model3d' : undefined;
-  const prompt = typeof r.prompt === 'string' ? r.prompt.trim() : '';
+  let view: ViewKey | undefined;
+  if (r.view !== undefined && r.view !== null && r.view !== '') {
+    if (kind || typeof r.view !== 'string' || !(VIEW_KEYS as readonly string[]).includes(r.view)) return { error: tr('vista inválida (esquerda, costas ou direita)') };
+    view = r.view as ViewKey;
+  }
+  const prompt = typeof r.prompt === 'string' && r.prompt.trim() ? r.prompt.trim() : view ? VIEW_PROMPTS[view] : '';
   if (!prompt && !kind) return { error: tr('escreva o prompt da imagem') };
   if (prompt.length > maxPrompt) return { error: tr('prompt longo demais (até {0} caracteres)', [maxPrompt]) };
   const rawTitle = typeof r.title === 'string' ? r.title.replace(/\s+/g, ' ').trim() : '';
@@ -82,7 +104,7 @@ export function parseStudioRequest(raw: unknown, maxPrompt = PROMPT_MAX): Studio
     }
     source = r.source;
   }
-  if (kind && !source) return { error: tr('escolha a imagem da galeria') };
+  if ((kind || view) && !source) return { error: tr('escolha a imagem da galeria') };
   const sourceJob = source && typeof r.sourceJob === 'string' && JOB_RE.test(r.sourceJob) ? r.sourceJob : undefined;
   let views: Model3dViews | undefined;
   if (r.views !== undefined && r.views !== null) {
@@ -97,7 +119,7 @@ export function parseStudioRequest(raw: unknown, maxPrompt = PROMPT_MAX): Studio
       (views ??= {})[k] = f;
     }
   }
-  return { project, title, prompt, ...(source ? { source } : {}), ...(sourceJob ? { sourceJob } : {}), ...(kind ? { kind } : {}), ...(views ? { views } : {}) };
+  return { project, title, prompt, ...(source ? { source } : {}), ...(sourceJob ? { sourceJob } : {}), ...(kind ? { kind } : {}), ...(views ? { views } : {}), ...(view ? { view } : {}) };
 }
 
 export function studioRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -360,7 +382,7 @@ export function createCodexImageGenerator(opts: CodexImageOptions): StudioGenera
     }
     if (!existsSync(target)) throw new Error(r.ok ? tr('o Codex terminou sem gerar a imagem') : tr('o Codex falhou: {0}', [r.error]));
     const job = higgsfieldJobOf(r.output);
-    const meta = { project: req.project, title: req.title, prompt: req.prompt, model, createdAt: started.toISOString(), file: name, ...(job ? { job } : {}), ...(req.source ? { source: req.source } : {}) };
+    const meta = { project: req.project, title: req.title, prompt: req.prompt, model, createdAt: started.toISOString(), file: name, ...(job ? { job } : {}), ...(req.source ? { source: req.source } : {}), ...(req.view && req.source ? { viewOf: req.source, view: req.view } : {}) };
     writeFileSync(join(dir, `${base}.json`), `${JSON.stringify(meta, null, 2)}\n`);
     const file = `${req.project}/${date}/${name}`;
     if (opts.mirror) mirrorImage(root, opts.mirror, file);

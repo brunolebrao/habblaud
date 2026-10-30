@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameS
 import { dirname, extname, join, sep } from 'node:path';
 import { tr } from '../../shared/i18n';
 import { HostWait, pollWithWait } from '../host-wait';
-import { parseStudioRequest, projectSlug, type Model3dViews, type StudioGenerator, type StudioRequest } from './generate';
+import { parseStudioRequest, projectSlug, VIEW_KEYS, type Model3dViews, type StudioGenerator, type StudioRequest, type ViewKey } from './generate';
 
 export const HOST_PRESENCE_MS = 10_000;
 const QUEUED_TIMEOUT_MS = 60_000;
@@ -53,6 +53,8 @@ export interface StudioJob {
   kind?: 'model3d';
   /** Modelo 3D multi-view: as outras vistas da galeria (`source` é a frente). */
   views?: Model3dViews;
+  /** Vista do multi-view: a imagem nova é o objeto de `source` visto deste lado. */
+  view?: ViewKey;
   status: StudioJobStatus;
   at: number;
   /** Quem pediu (o agente diz o próprio nome; só para mostrar). Ausente = o painel. */
@@ -95,6 +97,9 @@ export interface StudioItem {
   at: number;
   /** Modelos 3D desta imagem ("<projeto>/<data>/<nome>.stl" etc.), para baixar. */
   models?: string[];
+  /** Vista do multi-view: esta imagem é o objeto de `viewOf` (outra imagem da galeria) visto do lado `view`. */
+  viewOf?: string;
+  view?: ViewKey;
 }
 
 export interface StudioServiceOptions {
@@ -173,7 +178,9 @@ export function listGallery(root: string, only?: string): StudioItem[] {
         const stem = name.slice(0, -ext.length);
         const meta = readMeta(join(dir, `${stem}.json`));
         const models = names.filter((n) => n.startsWith(`${stem}.`) && MODEL_TYPES[extname(n).toLowerCase()] && n.slice(stem.length + 1).indexOf('.') < 0).sort().map((n) => `${project}/${date}/${n}`);
-        out.push({ file: `${project}/${date}/${name}`, project, date, title: str(meta.title, 120), prompt: str(meta.prompt), model: str(meta.model, 60), createdAt: str(meta.createdAt, 40), at, ...(models.length ? { models } : {}) });
+        const viewOf = str(meta.viewOf, 200);
+        const view = (VIEW_KEYS as readonly unknown[]).includes(meta.view) && viewOf && REL_RE.test(viewOf) ? { viewOf, view: meta.view as ViewKey } : {};
+        out.push({ file: `${project}/${date}/${name}`, project, date, title: str(meta.title, 120), prompt: str(meta.prompt), model: str(meta.model, 60), createdAt: str(meta.createdAt, 40), at, ...(models.length ? { models } : {}), ...view });
       }
     }
   }
@@ -293,7 +300,7 @@ export class StudioService {
       if (this.projectsBySlug.size >= MAX_PROJECTS) return { error: 'too-many', reason: tr('projetos demais') };
       this.projectsBySlug.set(req.project, { slug: req.project, name: req.project, updatedAt: this.now() });
     }
-    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, ...(req.source ? { source: req.source } : {}), ...(req.kind ? { kind: req.kind } : {}), ...(req.views ? { views: req.views } : {}), status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
+    const job: StudioJob = { id: this.opts.newId?.() ?? randomUUID(), project: req.project, title: req.title, prompt: req.prompt, ...(req.source ? { source: req.source } : {}), ...(req.kind ? { kind: req.kind } : {}), ...(req.views ? { views: req.views } : {}), ...(req.view ? { view: req.view } : {}), status: 'pending', at: this.now(), ...(requestedBy ? { requestedBy } : {}), ...(session ? { session } : {}) };
     const entry: Entry = { job, touched: this.now() };
     this.entries.set(job.id, entry);
     if (opts.direct) this.start(entry);
@@ -307,7 +314,7 @@ export class StudioService {
     const e = this.entries.get(id);
     if (!e || e.job.status !== 'pending') return { error: 'unknown', reason: tr('pedido desconhecido (já aprovado ou descartado?)') };
     const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt, source: e.job.source, kind: e.job.kind, views: e.job.views });
+    const req = parseStudioRequest({ project: e.job.project, title: r.title ?? e.job.title, prompt: r.prompt ?? e.job.prompt, source: e.job.source, kind: e.job.kind, views: e.job.views, view: e.job.view });
     if ('error' in req) return { error: 'invalid', reason: req.error };
     const busy = this.busy();
     if (busy) return busy;
@@ -408,7 +415,7 @@ export class StudioService {
 
   private request(job: StudioJob): StudioRequest {
     if (job.kind === 'model3d') return { project: job.project, title: job.title, prompt: '', source: job.source, kind: 'model3d', ...(job.views ? { views: job.views } : {}) };
-    return { project: job.project, title: job.title, prompt: composePrompt(job.prompt, this.projectsBySlug.get(job.project)?.style), ...(job.source ? { source: job.source } : {}) };
+    return { project: job.project, title: job.title, prompt: composePrompt(job.prompt, this.projectsBySlug.get(job.project)?.style), ...(job.source ? { source: job.source } : {}), ...(job.view ? { view: job.view } : {}) };
   }
 
   private start(e: Entry): void {

@@ -32,6 +32,10 @@ export interface StudioJobView {
   reviseTo?: string;
   file?: string;
   error?: string;
+  /** Imagem base (edição) ou a frente de uma vista do multi-view. */
+  source?: string;
+  /** Vista do multi-view que este pedido gera. */
+  view?: ViewKey;
 }
 
 export interface StudioItemView {
@@ -44,6 +48,9 @@ export interface StudioItemView {
   at: number;
   /** Modelos 3D desta imagem (STL, GLB), para baixar. */
   models?: string[];
+  /** Vista do multi-view: esta imagem é o objeto de `viewOf` visto do lado `view` (fica fora da galeria, na tela do 3D). */
+  viewOf?: string;
+  view?: ViewKey;
 }
 
 export interface StudioProjectView {
@@ -68,12 +75,14 @@ export interface StudioState {
 
 const FILE_RE = /^[a-z0-9][a-z0-9-]{0,39}\/\d{4}-\d{2}-\d{2}\/[\w.-]{1,120}$/;
 const MODEL_RE = /\.(?:stl|glb|3mf)$/i;
-/** Vistas extras do modelo 3D multi-view (a imagem do cartão é a frente; server/studio/generate.ts: VIEW_KEYS). */
+/** Vistas extras do modelo 3D multi-view (a imagem escolhida é a frente; server/studio/generate.ts: VIEW_KEYS). */
 const VIEWS = [
   ['left', () => tr('Esquerda')],
   ['back', () => tr('Costas')],
   ['right', () => tr('Direita')],
 ] as const;
+export type ViewKey = (typeof VIEWS)[number][0];
+const viewKey = (v: unknown): ViewKey | undefined => VIEWS.find(([k]) => k === v)?.[0];
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const STATUSES = ['pending', 'queued', 'sent', 'done', 'failed'];
 
@@ -91,13 +100,13 @@ export function parseStudio(raw: unknown): StudioState {
   const jobs = list(o.jobs).flatMap((j): StudioJobView[] => {
     const x = rec(j);
     if (typeof x.id !== 'string' || !STATUSES.includes(x.status as string)) return [];
-    return [{ id: x.id, project: str(x.project) ?? '', title: str(x.title) ?? '', prompt: str(x.prompt) ?? '', status: x.status as StudioJobView['status'], at: Number(x.at) || 0, requestedBy: str(x.requestedBy), session: typeof x.session === 'string' && !!x.session, reviseTo: str(x.reviseTo), file: file(x.file), error: str(x.error) }];
+    return [{ id: x.id, project: str(x.project) ?? '', title: str(x.title) ?? '', prompt: str(x.prompt) ?? '', status: x.status as StudioJobView['status'], at: Number(x.at) || 0, requestedBy: str(x.requestedBy), session: typeof x.session === 'string' && !!x.session, reviseTo: str(x.reviseTo), file: file(x.file), error: str(x.error), source: file(x.source), view: viewKey(x.view) }];
   });
   const items = list(o.items).flatMap((i): StudioItemView[] => {
     const x = rec(i);
     const f = file(x.file);
     if (!f) return [];
-    return [{ file: f, project: str(x.project) ?? f.split('/')[0]!, date: str(x.date) ?? f.split('/')[1]!, title: str(x.title), prompt: str(x.prompt), model: str(x.model), at: Number(x.at) || 0, models: list(x.models).map(file).filter((m): m is string => !!m && MODEL_RE.test(m)) }];
+    return [{ file: f, project: str(x.project) ?? f.split('/')[0]!, date: str(x.date) ?? f.split('/')[1]!, title: str(x.title), prompt: str(x.prompt), model: str(x.model), at: Number(x.at) || 0, models: list(x.models).map(file).filter((m): m is string => !!m && MODEL_RE.test(m)), ...(file(x.viewOf) && viewKey(x.view) ? { viewOf: file(x.viewOf), view: viewKey(x.view) } : {}) }];
   });
   const projects = list(o.projects).flatMap((p): StudioProjectView[] => {
     const x = rec(p);
@@ -171,6 +180,11 @@ export class Studio implements UiComponent {
   /** Rascunhos (formulários abertos não são refeitos a cada atualização). */
   private editing = false;
   private lastKey = '';
+  /** Tela do modelo 3D: a imagem da frente ('' = fechada), o modo e as vistas escolhidas à mão ('' = tirada). */
+  private model3d = '';
+  private mode3d: 'single' | 'multi' = 'multi';
+  private picks: Partial<Record<ViewKey, string>> = {};
+  private armed3d = false;
   /** Leva uma imagem da galeria ao formulário como base de uma edição (montado com a tela do projeto). */
   private editImage?: (item: StudioItemView | undefined) => void;
 
@@ -238,6 +252,7 @@ export class Studio implements UiComponent {
   private go(slug: string): void {
     this.project = slug;
     remember(slug);
+    this.model3d = '';
     this.editing = false;
     this.lastKey = '';
     setText(this.status, '');
@@ -400,6 +415,8 @@ export class Studio implements UiComponent {
 
   private projectView(p: StudioProjectView): HTMLElement[] {
     const s = this.state;
+    const front = this.model3d ? s.items.find((i) => i.file === this.model3d) : undefined;
+    if (front && !this.readOnly) return this.model3dView(front);
     const info = h(
       'div',
       { class: 'ui-studio__info' },
@@ -494,7 +511,9 @@ export class Studio implements UiComponent {
         ),
       ),
     );
-    const grid = h('div', { class: 'ui-studio__grid' }, ...s.items.map((i) => this.card(i)));
+    // As vistas do multi-view ficam na tela do 3D da imagem delas, não na galeria.
+    const files = new Set(s.items.map((i) => i.file));
+    const grid = h('div', { class: 'ui-studio__grid' }, ...s.items.filter((i) => !i.viewOf || !files.has(i.viewOf)).map((i) => this.card(i)));
     const empty = s.items.length ? [] : [h('p', { class: 'ui-studio__empty', text: tr('Nenhuma imagem neste projeto ainda.') })];
     const hint = h('p', { class: 'ui-studio__hint', text: tr('Agentes pedem imagens com POST /api/studio {project: "{0}", title, prompt, requestedBy, session}; o pedido espera você aqui.', [p.slug]) });
     if (this.readOnly) return [info, ...agentBtn, h('h3', { class: 'ui-studio__h', text: tr('Galeria') }), ...empty, grid];
@@ -581,6 +600,122 @@ export class Studio implements UiComponent {
     return call(`${STUDIO_URL}/jobs/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: JSON.stringify(body) });
   }
 
+  // ------------------------------------------------------------ modelo 3D: uma imagem ou multi-view
+
+  private open3d(file: string): void {
+    this.model3d = file;
+    this.picks = {};
+    this.armed3d = false;
+    this.editing = false;
+    this.rerender();
+    this.body.scrollTop = 0;
+  }
+
+  private rerender(): void {
+    this.lastKey = '';
+    this.renderPanel();
+  }
+
+  /** A imagem de cada vista: a escolhida à mão ou, sem escolha, a mais nova gerada para esta frente. */
+  private viewImage(front: string, k: ViewKey): StudioItemView | undefined {
+    const pick = this.picks[k];
+    if (pick !== undefined) return pick ? this.state.items.find((i) => i.file === pick) : undefined;
+    return this.state.items.find((i) => i.viewOf === front && i.view === k);
+  }
+
+  private model3dView(front: StudioItemView): HTMLElement[] {
+    const s = this.state;
+    const name = front.title ?? front.file.split('/').pop()!;
+    const multi = this.mode3d === 'multi';
+    const back = h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text: tr('‹ Galeria'), on: { click: () => ((this.model3d = ''), this.rerender()) } });
+    const mode = (m: 'single' | 'multi', label: string, desc: string) =>
+      h(
+        'button',
+        { class: `ui-studio__3d-mode${this.mode3d === m ? ' is-on' : ''}`, type: 'button', attrs: { 'aria-pressed': String(this.mode3d === m) }, on: { click: () => ((this.mode3d = m), (this.armed3d = false), this.rerender()) } },
+        h('strong', { text: label }),
+        h('span', { text: desc }),
+      );
+    const modes = h('div', { class: 'ui-studio__3d-modes' }, mode('multi', tr('Multi-view'), tr('Melhor forma: frente, lados e costas. Só pela Tripo.')), mode('single', tr('Uma imagem'), tr('Mais rápido: a IA imagina os outros lados.')));
+
+    const open = (j: StudioJobView) => j.status === 'queued' || j.status === 'sent';
+    const jobOf = (k: ViewKey) => s.jobs.find((j) => j.source === front.file && j.view === k && (open(j) || j.status === 'failed'));
+    const labels = Object.fromEntries(VIEWS.map(([k, l]) => [k, l()])) as Record<ViewKey, string>;
+    const requestView = (k: ViewKey) => {
+      delete this.picks[k];
+      return call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: front.project, title: `${name.slice(0, 60)} · ${labels[k]}`, source: front.file, view: k }) });
+    };
+    const others = s.items.filter((i) => i.file !== front.file && !(i.viewOf && i.viewOf !== front.file));
+    const thumb = (i: StudioItemView) => h('a', { class: 'ui-studio__thumb', attrs: { href: fileUrl(i.file), target: '_blank', rel: 'noopener noreferrer', title: i.title ?? i.file } }, h('img', { attrs: { src: fileUrl(i.file), alt: i.title ?? '' } }));
+    const slot = (label: string, body: HTMLElement, ...actions: HTMLElement[]) =>
+      h('div', { class: 'ui-studio__3d-slot' }, h('span', { class: 'ui-studio__3d-label', text: label }), body, ...(actions.length ? [h('div', { class: 'ui-studio__3d-actions' }, ...actions)] : []));
+    const small = (text: string, click: () => void, title?: string) => h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text, ...(title ? { title } : {}), on: { click } });
+
+    const missing: ViewKey[] = [];
+    let busy = 0;
+    let filled = 0;
+    const slots = VIEWS.map(([k]) => {
+      const img = this.viewImage(front.file, k);
+      const job = jobOf(k);
+      const running = !!job && open(job);
+      if (running) busy++;
+      if (img) filled++;
+      if (!img && !running) missing.push(k);
+      const pick = h('select', { class: 'ui-world__select ui-studio__3d-pick', attrs: { 'aria-label': tr('Escolher da galeria: {0}', [labels[k]]) } }, h('option', { text: tr('Escolher da galeria…'), attrs: { value: '' } }), ...others.map((x) => h('option', { text: (x.title ?? x.file.split('/').pop()!).slice(0, 50), attrs: { value: x.file } })));
+      pick.addEventListener('change', () => {
+        if (!pick.value) return;
+        this.picks[k] = pick.value;
+        this.armed3d = false;
+        this.rerender();
+      });
+      const box = img
+        ? thumb(img)
+        : h('div', { class: `ui-studio__3d-empty${running ? ' is-busy' : ''}`, text: running ? tr('Gerando…') : job?.status === 'failed' ? tr('Falhou: {0}', [job.error ?? '']) : tr('Vazia') });
+      const actions = running
+        ? []
+        : img
+          ? [small(tr('Refazer'), () => void this.act(() => requestView(k), tr('Gerando a vista: leva de 1 a 3 minutos.')), tr('Gerar esta vista de novo com o prompt pronto')), small(tr('Tirar'), () => ((this.picks[k] = ''), (this.armed3d = false), this.rerender()))]
+          : [small(tr('Gerar'), () => void this.act(() => requestView(k), tr('Gerando a vista: leva de 1 a 3 minutos.')), tr('Gerar esta vista com o prompt pronto (o mesmo objeto, girado)')), pick];
+      return slot(labels[k], box, ...actions);
+    });
+
+    const genAll = h('button', { class: 'ui-btn', type: 'button', text: tr('Gerar as vistas que faltam ({0})', [missing.length]) }) as HTMLButtonElement;
+    genAll.disabled = !s.available || !missing.length;
+    genAll.addEventListener('click', () =>
+      void this.act(async () => {
+        for (const k of missing) await requestView(k);
+      }, tr('Gerando {0} vistas: leva de 1 a 3 minutos.', [missing.length])),
+    );
+    const multiBox = h(
+      'div',
+      { class: 'ui-studio__3d-multi' },
+      h('div', { class: 'ui-studio__3d-slots' }, slot(tr('Frente'), thumb(front)), ...slots),
+      h('div', { class: 'ui-studio__actions' }, genAll),
+      h('p', { class: 'ui-studio__hint', text: tr('As vistas saem do Codex com um prompt pronto (o mesmo objeto, girado), sem gastar créditos da Tripo. Confira cada uma antes de gerar o modelo: refaça a que sair diferente da frente.') }),
+    );
+    const singleBox = h('div', { class: 'ui-studio__3d-single' }, h('div', { class: 'ui-studio__3d-slots' }, slot(tr('Imagem'), thumb(front))));
+
+    const go = h('button', { class: 'ui-btn ui-btn--primary', type: 'button', text: this.armed3d ? tr('Confirmar (gasta créditos)') : tr('Gerar modelo 3D') }) as HTMLButtonElement;
+    go.disabled = !s.available || (multi && (busy > 0 || filled === 0));
+    const why = multi && busy ? tr('Espere as vistas terminarem.') : multi && !filled ? tr('Gere ou escolha pelo menos uma vista.') : '';
+    go.addEventListener('click', () => {
+      if (!this.armed3d) {
+        this.armed3d = true;
+        return this.rerender();
+      }
+      const views = multi ? Object.fromEntries(VIEWS.flatMap(([k]) => (this.viewImage(front.file, k) ? [[k, this.viewImage(front.file, k)!.file]] : []))) : {};
+      this.armed3d = false;
+      void this.act(async () => {
+        await call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: front.project, kind: 'model3d', source: front.file, title: `${name.slice(0, 70)} (3D)`, ...(Object.keys(views).length ? { views } : {}) }) });
+        this.model3d = '';
+      }, tr('Gerando o modelo 3D: leva de 2 a 8 minutos.'));
+    });
+    const cancel = h('button', { class: 'ui-btn', type: 'button', text: tr('Cancelar'), on: { click: () => ((this.armed3d = false), this.rerender()) } });
+    setHidden(cancel, !this.armed3d);
+    return [
+      h('div', { class: 'ui-studio__3d' }, h('div', { class: 'ui-studio__3d-head' }, back, h('h3', { class: 'ui-studio__h', text: tr('Modelo 3D: {0}', [name]) })), modes, multi ? multiBox : singleBox, h('div', { class: 'ui-studio__actions ui-studio__3d-go' }, go, cancel, ...(why ? [h('span', { class: 'ui-studio__hint', text: why })] : []))),
+    ];
+  }
+
   private card(i: StudioItemView): HTMLElement {
     const url = fileUrl(i.file);
     const label = i.title ?? i.prompt?.slice(0, 80) ?? i.file;
@@ -595,38 +730,7 @@ export class Studio implements UiComponent {
     const models = (i.models ?? []).map((m) =>
       h('a', { class: 'ui-studio__model', text: m.split('.').pop()!.toUpperCase(), attrs: { href: fileUrl(m), download: m.split('/').pop()!, title: tr('Baixar o modelo 3D') } }),
     );
-    const make3d = h('button', { class: 'ui-btn ui-btn--sm ui-studio__make3d', type: 'button', text: tr('Gerar 3D'), title: tr('Transformar esta imagem num modelo 3D para impressão (STL), pela Tripo ou pelo 3D AI Studio') });
-    // Multi-view (opcional): outras imagens do mesmo objeto, de lado e de costas; esta é a frente.
-    const others = this.state.items.filter((x) => x.project === i.project && x.file !== i.file);
-    const selects = VIEWS.map(([key, name]) => {
-      const select = h('select', { class: 'ui-world__select ui-studio__view', attrs: { 'aria-label': name() } }, h('option', { text: '—', attrs: { value: '' } }), ...others.map((x) => h('option', { text: (x.title ?? x.file.split('/').pop()!).slice(0, 60), attrs: { value: x.file } })));
-      return { key, select, row: h('label', { class: 'ui-studio__view-row' }, h('span', { text: name() }), select) };
-    });
-    const cancel3d = h('button', { class: 'ui-btn ui-btn--sm', type: 'button', text: tr('Cancelar') });
-    const views = h('div', { class: 'ui-studio__views' }, ...(others.length ? [h('p', { class: 'ui-studio__views-hint', text: tr('Multi-view (opcional, só pela Tripo): escolha outras imagens do mesmo objeto. Esta é a frente.') }), ...selects.map((x) => x.row)] : []), cancel3d);
-    setHidden(views, true);
-    let armed = false;
-    cancel3d.addEventListener('click', () => {
-      armed = false;
-      this.editing = false;
-      setText(make3d, tr('Gerar 3D'));
-      setHidden(views, true);
-    });
-    make3d.addEventListener('click', () => {
-      if (!armed) {
-        armed = true;
-        this.editing = true;
-        setText(make3d, tr('Confirmar (gasta créditos)'));
-        setHidden(views, false);
-        return;
-      }
-      const picked = Object.fromEntries(selects.filter((x) => x.select.value).map((x) => [x.key, x.select.value]));
-      const title = `${label.slice(0, 70)} (3D)`;
-      void this.act(
-        () => call(STUDIO_URL, { method: 'POST', body: JSON.stringify({ project: i.project, kind: 'model3d', source: i.file, title, ...(Object.keys(picked).length ? { views: picked } : {}) }) }),
-        tr('Gerando o modelo 3D: leva de 2 a 8 minutos.'),
-      );
-    });
+    const make3d = h('button', { class: 'ui-btn ui-btn--sm ui-studio__make3d', type: 'button', text: tr('Gerar 3D'), title: tr('Transformar esta imagem num modelo 3D para impressão (STL), com uma imagem ou multi-view'), on: { click: () => this.open3d(i.file) } });
     make3d.disabled = !this.state.available;
     setHidden(make3d, this.readOnly || models.length > 0);
     return h(
@@ -635,7 +739,6 @@ export class Studio implements UiComponent {
       link,
       h('figcaption', {}, h('span', { class: 'ui-studio__meta', text: label, attrs: { title: `${i.date}${i.model ? ` · ${i.model}` : ''}` } }), edit, copy),
       h('div', { class: 'ui-studio__models' }, ...models, make3d),
-      views,
     );
   }
 }

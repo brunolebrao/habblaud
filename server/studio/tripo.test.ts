@@ -110,3 +110,27 @@ describe('vistas do multi-view no pedido', () => {
     expect(other.submit({ ...req, views: { back: 'p/2026-10-29/zz.png' } }, { direct: true })).toMatchObject({ error: 'invalid' });
   });
 });
+
+describe('vistas geradas com o prompt pronto', () => {
+  it('pedido com `view` usa o prompt pronto da vista e exige a imagem da frente', () => {
+    const r = parseStudioRequest({ project: 'p', title: 'A · Costas', source: 'p/2026-10-29/a.png', view: 'back' });
+    expect(r).toMatchObject({ view: 'back', source: 'p/2026-10-29/a.png' });
+    expect((r as { prompt: string }).prompt).toMatch(/COSTAS/);
+    expect(parseStudioRequest({ project: 'p', title: 't', view: 'back' })).toHaveProperty('error');
+    expect(parseStudioRequest({ project: 'p', title: 't', source: 'p/2026-10-29/a.png', view: 'top' })).toHaveProperty('error');
+    expect(parseStudioRequest({ ...req, view: 'back' })).toHaveProperty('error');
+  });
+
+  it('a galeria diz de qual imagem a vista é; o Estúdio manda a vista ao auxiliar', () => {
+    const root = setup();
+    writeFileSync(join(root, 'p/2026-10-29/b.json'), JSON.stringify({ title: 'A · Costas', viewOf: 'p/2026-10-29/a.png', view: 'back' }));
+    writeFileSync(join(root, 'p/2026-10-29/c.json'), JSON.stringify({ viewOf: 'p/2026-10-29/a.png', view: 'cima' }));
+    const items = listGallery(root, 'p');
+    expect(items.find((i) => i.file.endsWith('b.png'))).toMatchObject({ viewOf: 'p/2026-10-29/a.png', view: 'back' });
+    expect(items.find((i) => i.file.endsWith('c.png'))).not.toHaveProperty('view');
+    const studio = new StudioService({ root });
+    studio.poll();
+    expect(studio.submit({ project: 'p', title: 'A · Esquerda', source: 'p/2026-10-29/a.png', view: 'left' }, { direct: true })).toHaveProperty('job');
+    expect(studio.poll()[0]).toMatchObject({ view: 'left', source: 'p/2026-10-29/a.png' });
+  });
+});
